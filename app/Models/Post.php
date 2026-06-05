@@ -9,11 +9,13 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Post extends Model
 {
     /** @use HasFactory<\Database\Factories\PostFactory> */
     use HasFactory, HasUuids;
+    use SoftDeletes;
 
     protected $fillable = [
         'user_id',
@@ -27,6 +29,7 @@ class Post extends Model
         'vote_score',
         'is_answered',
         'accepted_answer_id',
+        'edit_count',
     ];
 
     protected $casts = [
@@ -34,7 +37,16 @@ class Post extends Model
         'vote_score' => 'integer',
         'is_answered' => 'boolean',
         'published_at' => 'datetime',
+        'edit_count' => 'integer',
     ];
+
+    protected static function booted()
+{
+    static::deleting(function ($post) {
+        // Jika postingan di-delete (soft delete), otomatis soft delete semua komentar yang ada di postingan ini
+        $post->comments()->delete();
+    });
+}
 
     public function user(): BelongsTo
     {
@@ -49,6 +61,11 @@ class Post extends Model
     public function comments(): HasMany
     {
         return $this->hasMany(Comment::class);
+    }
+
+    public function editHistories(): HasMany
+    {
+        return $this->hasMany(PostEditHistory::class);
     }
 
     /**

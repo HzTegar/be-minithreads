@@ -7,6 +7,8 @@ use App\Http\Controllers\Api\PostController;
 use App\Http\Controllers\Api\TagController;
 use App\Http\Controllers\Api\CategoryController;
 use App\Http\Controllers\Api\CommentController;
+use App\Http\Controllers\Api\VoteController;
+use App\Http\Controllers\Api\BookmarkController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -27,6 +29,9 @@ Route::get('posts/{id}', [PostController::class, 'show']);
 Route::get('tags', [TagController::class, 'index']);
 Route::get('tags/{id}', [TagController::class, 'show']);
 
+Route::get('categories', [CategoryController::class, 'index']);
+Route::get('categories/{id}', [CategoryController::class, 'show']);
+
 
 // 2. RUTE PROTECTED (Wajib Login dengan JWT)
 Route::middleware('auth:api')->group(function () {
@@ -37,6 +42,11 @@ Route::middleware('auth:api')->group(function () {
         Route::post('logout', [AuthController::class, 'logout']);
         Route::get('admin/dashboard', [AuthController::class, 'dashboard']);
     });
+    // Rute untuk melihat seluruh daftar postingan yang disimpan
+    Route::get('/bookmarks', [BookmarkController::class, 'index']);
+    
+    // Rute untuk melakukan aksi simpan/batal simpan bookmark
+    Route::post('/posts/{postId}/bookmark', [BookmarkController::class, 'toggle']);
 
     Route::post('profile/update', [ProfileController::class, 'updateProfile']);
 
@@ -62,30 +72,32 @@ Route::middleware('auth:api')->group(function () {
             return response()->json(['message' => 'Thread berhasil dihapus oleh Moderator/Admin.']);
         });
     });
-    // route public bisa diakses tanpa login, oleh semua user
-    Route::get('categories', [CategoryController::class, 'index']);
-    Route::get('categories/{id}', [CategoryController::class, 'show']);
-
-        // route privat jadi harus login agar memiliki akses, tapi hanya admin dan moderator
-        Route::middleware('auth:api')->group(function () {
     
-        // Bisa diakses Admin dan Moderator (Store & Update)
-        Route::post('categories', [CategoryController::class, 'store']);
-        Route::put('categories/{id}', [CategoryController::class, 'update']);
-    
-        // hanya bisa diakses oleh admin (delete/destroy)
-        Route::delete('categories/{id}', [CategoryController::class, 'destroy']);
-    });
-
     Route::middleware('auth:api')->group(function () {
-    // Route Postingan Anda yang sudah ada...
-    Route::post('/posts', [PostController::class, 'store']);
     
-        // TAMBAHKAN ROUTE INI UNTUK KOMENTAR
-        Route::post('/posts/{postId}/comments', [CommentController::class, 'store']);
+    // Rute untuk melihat seluruh daftar postingan yang disimpan
+    Route::get('/bookmarks', [BookmarkController::class, 'index']);
     
-        // Route Toggle Accepted Answer Anda...
-        Route::post('/posts/{postId}/comments/{commentId}/toggle-accepted', [PostController::class, 'toggleAcceptedAnswer']);
-    });
+    // Rute untuk melakukan aksi simpan/batal simpan bookmark
+    Route::post('/posts/{postId}/bookmark', [BookmarkController::class, 'toggle']);
+
+});
+
+    // Bisa diakses Admin dan Moderator (Store & Update)
+    Route::post('categories', [CategoryController::class, 'store']);
+    Route::put('categories/{id}', [CategoryController::class, 'update']);
+
+    // hanya bisa diakses oleh admin (delete/destroy)
+    Route::delete('categories/{id}', [CategoryController::class, 'destroy']);
+
+    // TAMBAHKAN ROUTE INI UNTUK KOMENTAR
+    Route::post('/posts/{postId}/comments', [CommentController::class, 'store']);
+    Route::put('/comments/{id}', [CommentController::class, 'update']);
+    // Route Toggle Accepted Answer Anda...
+    Route::post('/posts/{postId}/comments/{commentId}/toggle-accepted', [PostController::class, 'toggleAcceptedAnswer']);
+    // TAMBAHKAN BARIS INI: Rute untuk menghapus elemen komentar (Penyembunyian Semu)
+    Route::delete('/comments/{id}', [CommentController::class, 'destroy']);
     
+    // Jalur endpoint untuk melakukan proses upvote dan downvote
+    Route::post('/vote', [VoteController::class, 'handleVote']);
 });

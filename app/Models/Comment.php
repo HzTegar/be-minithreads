@@ -8,11 +8,13 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Comment extends Model
 {
     /** @use HasFactory<\Database\Factories\CommentFactory> */
     use HasFactory, HasUuids;
+    use SoftDeletes;
 
     protected $fillable = [
         'post_id',
@@ -21,11 +23,13 @@ class Comment extends Model
         'body',
         'vote_score',
         'is_accepted',
+        'is_edited',
     ];
 
     protected $casts = [
         'vote_score' => 'integer',
         'is_accepted' => 'boolean',
+        'is_edited' => 'boolean',
     ];
 
     public function post(): BelongsTo
@@ -36,6 +40,11 @@ class Comment extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function editHistories(): HasMany
+    {
+        return $this->hasMany(CommentEditHistory::class);
     }
 
     public function parent(): BelongsTo

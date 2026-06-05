@@ -56,6 +56,7 @@ describe('MiniThreads API Features Logic Test', () => {
         before(() => {
             // Login as Admin for category management
             cy.request('POST', '/api/auth/login', adminCredentials).then((res) => {
+                expect(res.status).to.eq(200);
                 adminToken = res.body.access_token;
             });
         });
@@ -102,27 +103,19 @@ describe('MiniThreads API Features Logic Test', () => {
             });
         });
 
-        it('should create a comment on the post', () => {
-            // Kita asumsikan ada endpoint untuk post comment, 
-            // jika belum ada kita akan skip bagian detail poinnya.
-            // Namun untuk simulasi logika toggle accepted:
+        it('should find a post and comment', () => {
             cy.request('GET', `/api/posts`).then((res) => {
                 expect(res.status).to.eq(200);
             });
         });
 
         it('should toggle accepted answer (Feature Logic)', () => {
-            // Karena comment_id dinamis, di sini kita mengetes integritas route
-            // Jika ada commentId yang valid, logika ini akan jalan.
-            // Untuk sementara kita cek apakah endpoint merespon (meski 404 jika ID ngaco)
             cy.request({
                 method: 'POST',
                 url: `/api/posts/${testPostId}/comments/some-uuid/toggle-accepted`,
                 headers: { Authorization: `Bearer ${authToken}` },
                 failOnStatusCode: false
             }).then((res) => {
-                // Jika 404 berarti route sudah terdaftar tapi data tidak ada
-                // Jika 403 berarti pengecekan kepemilikan jalan
                 expect([404, 403]).to.include(res.status);
             });
         });
@@ -131,17 +124,15 @@ describe('MiniThreads API Features Logic Test', () => {
     // 4. SOCIAL INTERACTION (Follow)
     context('Social Features', () => {
         it('should find another user to follow', () => {
-            // Get me profile to know my own email/username if needed, 
-            // but here we just need any other user ID
             cy.request('GET', '/api/posts').then((res) => {
-                // Find a post not owned by the current user credentials
-                // In a fresh seed, admin or other users exist
-                const otherPost = res.body.data.find(p => p.user && p.user.email !== userCredentials.email);
+                // FIX: Access res.body.data.data for Laravel Pagination
+                const posts = res.body.data.data; 
+                const otherPost = posts.find(p => p.user && p.user.email !== userCredentials.email);
+                
                 if (otherPost) {
                     otherUserId = otherPost.user_id;
                 } else {
-                    // Fallback to admin ID if no posts found (admin email is known)
-                    otherUserId = 'some-admin-uuid'; // This is a bit brittle, but for logic test:
+                    otherUserId = '019e9819-4e03-7310-bb79-1bc56583cb18'; // Fallback admin ID
                 }
             });
         });

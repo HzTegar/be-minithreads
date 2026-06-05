@@ -12,7 +12,7 @@ class Category extends Model
 {
     /** @use HasFactory<\Database\Factories\CategoryFactory> */
     use HasFactory, HasUuids;
-
+    
     protected $fillable = [
         'name',
         'slug',

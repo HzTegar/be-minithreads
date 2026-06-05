@@ -60,12 +60,13 @@ class CategoryController extends Controller
                 'description' => $request->description,
             ]);
 
-            $category->posts_count = 0;
+            // Ambil ulang data fresh dari database bersama posts_count agar UUID-nya terefres sempurna
+            $freshCategory = Category::withCount('posts')->find($category->id);
 
             return response()->json([
                 'success' => true,
                 'message' => 'Kategori baru berhasil dibuat, bro!',
-                'data'    => $category
+                'data'    => $freshCategory // Mengembalikan objek utuh yang dijamin memiliki properti ID/UUID
             ], 201);
 
         } catch (\Exception $e) {
@@ -142,12 +143,12 @@ class CategoryController extends Controller
                 'description' => $request->description ?? $category->description,
             ]);
 
-            $category = Category::withCount('posts')->find($id);
+            $categoryResult = Category::withCount('posts')->find($id);
 
             return response()->json([
                 'success' => true,
                 'message' => 'Kategori berhasil diperbarui, bro!',
-                'data'    => $category
+                'data'    => $categoryResult
             ], 200);
 
         } catch (\Exception $e) {

@@ -5,28 +5,19 @@ namespace Database\Seeders;
 use App\Models\User;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Str;
 
 class DatabaseSeeder extends Seeder
 {
     public function run(): void
     {
-        // Seed Roles and Categories first
-        $this->call([
-            RoleSeeder::class,
-            CategorySeeder::class,
-            TagSeeder::class,
-        ]);
-
-        // 1. Admin
+        // 1. Akun Tetap untuk Testing (Semua kolom disesuaikan dengan skema database Anda)
         User::create([
-            'username' => 'admin_super',
+            'username' => 'admin_super', // Konsisten dengan sebelumnya
             'email' => 'admin@minithreads.com',
-            'password_hash' => Hash::make('password123'),
+            'password_hash' => Hash::make('password123'), // Sesuai dengan Cypress test
             'level' => 'admin',
         ]);
 
-        // 2. Moderator
         User::create([
             'username' => 'mod_kece',
             'email' => 'moderator@minithreads.com',
@@ -34,7 +25,6 @@ class DatabaseSeeder extends Seeder
             'level' => 'moderator',
         ]);
 
-        // 3. User Biasa
         User::create([
             'username' => 'user_biasa',
             'email' => 'user@minithreads.com',
@@ -42,11 +32,13 @@ class DatabaseSeeder extends Seeder
             'level' => 'user',
         ]);
 
-        // 4. Random Users
-        User::factory(10)->create();
+        // 2. Random Users tambahan
+        User::factory(5)->create();
 
-        // 5. Posts
+        // 3. Panggil Seeder Data Dummy lainnya
         $this->call([
+            CategorySeeder::class,
+            TagSeeder::class,
             PostSeeder::class,
         ]);
     }

@@ -11,21 +11,16 @@ class TagSeeder extends Seeder
     public function run(): void
     {
         $tags = [
-            ['name' => 'Laravel', 'color' => '#ff2d20'],
-            ['name' => 'PHP', 'color' => '#777bb4'],
-            ['name' => 'JavaScript', 'color' => '#f7df1e'],
-            ['name' => 'React', 'color' => '#61dafb'],
-            ['name' => 'Vue', 'color' => '#42b883'],
-            ['name' => 'Tutorial', 'color' => '#000000'],
-            ['name' => 'Help', 'color' => '#ff0000'],
-            ['name' => 'Showcase', 'color' => '#00ff00'],
+            'Laravel', 'React', 'Vue', 'Tailwind', 'Python', 'PHP',
+            'Fitness', 'Nutrisi', 'Traveling', 'Kopi', 'Gaming',
+            'AI', 'Blockchain', 'Cloud', 'CyberSecurity'
         ];
 
-        foreach ($tags as $tag) {
+        foreach ($tags as $tagName) {
             Tag::create([
-                'name' => $tag['name'],
-                'slug' => Str::slug($tag['name']),
-                'color' => $tag['color'],
+                'name' => $tagName,
+                'slug' => Str::slug($tagName),
+                'color' => '#' . str_pad(dechex(mt_rand(0, 0xFFFFFF)), 6, '0', STR_PAD_LEFT),
             ]);
         }
     }
