@@ -11,6 +11,8 @@ class Bookmark extends Model
 {
     use HasFactory, HasUuids;
 
+    protected $table = 'bookmarks';
+
     protected $fillable = [
         'user_id',
         'post_id',

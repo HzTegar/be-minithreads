@@ -125,9 +125,14 @@ class User extends Authenticatable implements JWTSubject
         return $this->hasMany(PointsLog::class);
     }
 
-    public function bookmarks(): HasMany
+    public function bookmarkedPosts()
     {
-        return $this->hasMany(Bookmark::class);
+        return $this->belongsToMany(Post::class, 'bookmarks', 'user_id', 'post_id')->withTimestamps();
+    }
+
+    public function bookmarks()
+    {
+        return $this->hasMany(\App\Models\Bookmark::class, 'user_id');
     }
 
     public function claps(): HasMany
