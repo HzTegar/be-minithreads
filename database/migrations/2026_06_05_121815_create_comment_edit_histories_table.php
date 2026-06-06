@@ -13,9 +13,12 @@ return new class extends Migration
     {
         Schema::create('comment_edit_histories', function (Blueprint $table) {
             $table->uuid('id')->primary();
-            $table->foreignUuid('comment_id')->constrained()->onDelete('cascade');
-            $table->text('old_body')->nullable();
-            $table->text('new_body')->nullable();
+            $table->foreignUuid('comment_id')->constrained('comments')->onDelete('cascade');
+            $table->foreignUuid('user_id')->constrained('users')->onDelete('cascade');
+            $table->text('old_content'); 
+            $table->text('new_content');
+            $table->integer('edit_number'); 
+            
             $table->timestamps();
         });
     }

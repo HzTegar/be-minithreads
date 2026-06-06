@@ -10,27 +10,38 @@ class DatabaseSeeder extends Seeder
 {
     public function run(): void
     {
-        // 1. Akun Tetap untuk Testing (Semua kolom disesuaikan dengan skema database Anda)
-        User::create([
-            'username' => 'admin_super', // Konsisten dengan sebelumnya
-            'email' => 'admin@minithreads.com',
-            'password_hash' => Hash::make('password123'), // Sesuai dengan Cypress test
-            'level' => 'admin',
-        ]);
+        // 1. Akun Tetap untuk Testing
+        // Pastikan tidak duplikat jika dijalankan ulang
+        $users = [
+            [
+                'username' => 'admin_super',
+                'email' => 'admin@minithreads.com',
+                'password_hash' => Hash::make('password123'),
+                'level' => 'admin',
+                'bio' => 'Saya adalah Admin Super di Mini Threads.',
+            ],
+            [
+                'username' => 'mod_kece',
+                'email' => 'moderator@minithreads.com',
+                'password_hash' => Hash::make('password123'),
+                'level' => 'moderator',
+                'bio' => 'Moderator yang siap menjaga komunitas.',
+            ],
+            [
+                'username' => 'user_biasa',
+                'email' => 'user@minithreads.com',
+                'password_hash' => Hash::make('password123'),
+                'level' => 'user',
+                'bio' => 'Hanya user biasa yang suka membaca.',
+            ]
+        ];
 
-        User::create([
-            'username' => 'mod_kece',
-            'email' => 'moderator@minithreads.com',
-            'password_hash' => Hash::make('password123'),
-            'level' => 'moderator',
-        ]);
-
-        User::create([
-            'username' => 'user_biasa',
-            'email' => 'user@minithreads.com',
-            'password_hash' => Hash::make('password123'),
-            'level' => 'user',
-        ]);
+        foreach ($users as $userData) {
+            User::firstOrCreate(
+                ['email' => $userData['email']],
+                $userData
+            );
+        }
 
         // 2. Random Users tambahan
         User::factory(5)->create();

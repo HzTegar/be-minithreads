@@ -43,6 +43,9 @@ class FollowController extends Controller
     $attached = $me->followings()->toggle($targetUser->id);
 
     if (count($attached['attached']) > 0) {
+        // Kirim Notifikasi ke target user
+        $targetUser->notify(new \App\Notifications\UserFollowedNotification($me));
+
         return response()->json([
             'success' => true,
             'message' => 'Berhasil mengikuti ' . $targetUser->username

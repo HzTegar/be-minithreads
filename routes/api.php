@@ -9,7 +9,12 @@ use App\Http\Controllers\Api\CategoryController;
 use App\Http\Controllers\Api\CommentController;
 use App\Http\Controllers\Api\VoteController;
 use App\Http\Controllers\Api\BookmarkController;
+use App\Http\Controllers\Api\LikeController;
+use App\Http\Controllers\Api\NotificationController;
+use App\Http\Controllers\Api\ReportController;
+use App\Http\Controllers\Api\SearchController;
 use Illuminate\Support\Facades\Route;
+
 
 /*
 |--------------------------------------------------------------------------
@@ -21,6 +26,15 @@ use Illuminate\Support\Facades\Route;
 Route::group(['prefix' => 'auth'], function () {
     Route::post('register', [AuthController::class, 'register']);
     Route::post('login', [AuthController::class, 'login']);
+});
+
+// FITUR SEARCH (Publik)
+Route::group(['prefix' => 'search'], function () {
+    Route::get('global', [SearchController::class, 'searchGlobal']);
+    Route::get('posts', [SearchController::class, 'searchPosts']);
+    Route::get('users', [SearchController::class, 'searchUsers']);
+    Route::get('tags', [SearchController::class, 'searchTags']);
+    Route::get('categories', [SearchController::class, 'searchCategories']);
 });
 
 Route::get('posts', [PostController::class, 'index']);
@@ -42,11 +56,15 @@ Route::middleware('auth:api')->group(function () {
         Route::post('logout', [AuthController::class, 'logout']);
         Route::get('admin/dashboard', [AuthController::class, 'dashboard']);
     });
+    
     // Rute untuk melihat seluruh daftar postingan yang disimpan
     Route::get('/bookmarks', [BookmarkController::class, 'index']);
     
     // Rute untuk melakukan aksi simpan/batal simpan bookmark
     Route::post('/posts/{postId}/bookmark', [BookmarkController::class, 'toggle']);
+
+    Route::get('/posts/{id}/history', [PostController::class, 'viewHistory']);
+    Route::post('/posts/{id}/toggle-archive', [PostController::class, 'toggleArchive']);
 
     Route::post('profile/update', [ProfileController::class, 'updateProfile']);
 
@@ -59,6 +77,8 @@ Route::middleware('auth:api')->group(function () {
     Route::delete('posts/{id}', [PostController::class, 'destroy']);
     Route::post('/posts/{postId}/comments/{commentId}/toggle-accepted', [PostController::class, 'toggleAcceptedAnswer']);
     
+    // KITA SUDAH PINDAHKAN RUTE SEARCH DARI SINI KE ATAS 🚀
+
     // Tags Management (Hanya Admin)
     Route::middleware('role:admin')->group(function () {
         Route::post('tags', [TagController::class, 'store']);
@@ -74,14 +94,12 @@ Route::middleware('auth:api')->group(function () {
     });
     
     Route::middleware('auth:api')->group(function () {
-    
-    // Rute untuk melihat seluruh daftar postingan yang disimpan
-    Route::get('/bookmarks', [BookmarkController::class, 'index']);
-    
-    // Rute untuk melakukan aksi simpan/batal simpan bookmark
-    Route::post('/posts/{postId}/bookmark', [BookmarkController::class, 'toggle']);
-
-});
+        // Rute untuk melihat seluruh daftar postingan yang disimpan
+        Route::get('/bookmarks', [BookmarkController::class, 'index']);
+        
+        // Rute untuk melakukan aksi simpan/batal simpan bookmark
+        Route::post('/posts/{postId}/bookmark', [BookmarkController::class, 'toggle']);
+    });
 
     // Bisa diakses Admin dan Moderator (Store & Update)
     Route::post('categories', [CategoryController::class, 'store']);
@@ -93,11 +111,31 @@ Route::middleware('auth:api')->group(function () {
     // TAMBAHKAN ROUTE INI UNTUK KOMENTAR
     Route::post('/posts/{postId}/comments', [CommentController::class, 'store']);
     Route::put('/comments/{id}', [CommentController::class, 'update']);
-    // Route Toggle Accepted Answer Anda...
+    Route::get('/comments/{id}/history', [CommentController::class, 'viewHistory']);
+    
     Route::post('/posts/{postId}/comments/{commentId}/toggle-accepted', [PostController::class, 'toggleAcceptedAnswer']);
-    // TAMBAHKAN BARIS INI: Rute untuk menghapus elemen komentar (Penyembunyian Semu)
+    Route::post('/comments/{id}/like', [CommentController::class, 'toggleLike']);
     Route::delete('/comments/{id}', [CommentController::class, 'destroy']);
     
     // Jalur endpoint untuk melakukan proses upvote dan downvote
     Route::post('/vote', [VoteController::class, 'handleVote']);
+
+    // Jalur endpoint untuk melakukan proses like dan unlike (Polymorphic)
+    Route::post('/like', [LikeController::class, 'toggleLike']);
+
+    // NOTIFIKASI
+    Route::get('/notifications', [NotificationController::class, 'index']);
+    Route::post('/notifications/{id}/read', [NotificationController::class, 'markAsRead']);
+    Route::post('/notifications/read-all', [NotificationController::class, 'markAllAsRead']);
+    Route::delete('/notifications/{id}', [NotificationController::class, 'destroy']);
+
+    // REPORT / FLAG CONTENT
+    Route::post('/reports', [ReportController::class, 'store']); // User melapor
+    
+    // Manajemen Report (Admin & Moderator)
+    Route::middleware('role:admin,moderator')->group(function () {
+        Route::get('/admin/reports', [ReportController::class, 'index']);
+        Route::get('/admin/reports/{id}', [ReportController::class, 'show']);
+        Route::put('/admin/reports/{id}', [ReportController::class, 'update']);
+    });
 });

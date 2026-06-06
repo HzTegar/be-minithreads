@@ -2,23 +2,46 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Str;
 
 class CommentEditHistory extends Model
 {
-    use HasFactory, HasUuids;
+    use HasFactory;
 
+    protected $keyType = 'string';
+    public $incrementing = false;
+
+    // Kolom yang wajib diizinkan untuk diisi massal
     protected $fillable = [
         'comment_id',
-        'old_body',
-        'new_body',
+        'user_id',
+        'old_content',
+        'new_content',
+        'edit_number',
     ];
 
-    public function comment(): BelongsTo
+    protected static function boot()
     {
-        return $this->belongsTo(Comment::class);
+        parent::boot();
+        // Membuat UUID otomatis saat data riwayat baru dibuat
+        static::creating(function ($model) {
+            if (empty($model->{$model->getKeyName()})) {
+                $model->{$model->getKeyName()} = (string) Str::uuid();
+            }
+        });
+    }
+
+    // Relasi balik ke komentar utama
+    public function comment()
+    {
+        return $this->belongsTo(Comment::class, 'comment_id');
+    }
+
+    // Relasi untuk melihat siapa staf/user yang mengedit
+    public function user()
+    {
+        return $this->belongsTo(User::class, 'user_id');
     }
 }

@@ -29,6 +29,7 @@ class Post extends Model
         'vote_score',
         'is_answered',
         'accepted_answer_id',
+        'closed_at',
         'edit_count',
     ];
 
@@ -37,8 +38,39 @@ class Post extends Model
         'vote_score' => 'integer',
         'is_answered' => 'boolean',
         'published_at' => 'datetime',
+        'closed_at' => 'datetime',
         'edit_count' => 'integer',
     ];
+
+    protected $appends = ['can_reopen', 'is_closed_permanently', 'is_liked'];
+
+    /**
+     * Cek apakah user sedang login sudah me-like postingan ini
+     */
+    public function getIsLikedAttribute(): bool
+    {
+        $user = auth('api')->user();
+        if (!$user) return false;
+        return $this->likes()->where('user_id', $user->id)->exists();
+    }
+
+    /**
+     * Cek apakah postingan bisa dibuka kembali (Masih dalam 24 jam)
+     */
+    public function getCanReopenAttribute(): bool
+    {
+        if (!$this->closed_at) return true;
+        return $this->closed_at->diffInHours(now()) < 24;
+    }
+
+    /**
+     * Cek apakah sudah terarsip selamanya
+     */
+    public function getIsClosedPermanentlyAttribute(): bool
+    {
+        if (!$this->closed_at) return false;
+        return $this->closed_at->diffInHours(now()) >= 24;
+    }
 
     protected static function booted()
 {
@@ -63,7 +95,7 @@ class Post extends Model
         return $this->hasMany(Comment::class);
     }
 
-    public function editHistories(): HasMany
+    public function edit_histories(): HasMany
     {
         return $this->hasMany(PostEditHistory::class);
     }
@@ -91,6 +123,11 @@ class Post extends Model
     public function likes(): MorphMany
     {
         return $this->morphMany(Like::class, 'target');
+    }
+
+    public function reports(): MorphMany
+    {
+        return $this->morphMany(Report::class, 'target');
     }
 
     public function claps(): MorphMany

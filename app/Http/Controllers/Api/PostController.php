@@ -5,92 +5,79 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Post;
 use App\Models\Comment;
+use App\Models\PostEditHistory; // <-- WAJIB IMPORT INI, BRO!
 use App\Services\ReputationService;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\DB;
 
 class PostController extends Controller
 {
     /**
-     * 1. GET ALL POSTS WITH FILTER & PAGINATION (READ - INDEX)
-     * Mengambil data postingan terbaru dengan dukungan filter category_id, user_id, dan tag (slug atau ID)
+     * 1. LIST SEMUA POSTINGAN (DENGAN PAGINATION & SEARCH)
      */
     public function index(Request $request)
     {
-        // Inisialisasi query dasar, dimuat dengan relasi, dan diurutkan dari yang terbaru
-        $query = Post::with(['user', 'category', 'comments', 'tags'])->latest();
+        $query = Post::with(['user', 'category', 'tags'])->latest();
 
-        // Terapkan filter hanya jika parameter benar-benar diisi di URL (Query Params)
-        if ($request->filled('category_id')) {
-            $query->where('category_id', $request->category_id);
-        }
-
-        if ($request->filled('user_id')) {
-            $query->where('user_id', $request->user_id);
-        }
-
-        if ($request->filled('tag')) {
-            $query->whereHas('tags', function ($q) use ($request) {
-                $q->where('slug', $request->tag)->orWhere('id', $request->tag);
+        // Filter berdasarkan kategori (slug)
+        if ($request->has('category')) {
+            $query->whereHas('category', function ($q) use ($request) {
+                $q->where('slug', $request->category);
             });
         }
 
-        // Eksekusi pagination (10 item per halaman)
+        // Filter berdasarkan tag (slug)
+        if ($request->has('tag')) {
+            $query->whereHas('tags', function ($q) use ($request) {
+                $q->where('slug', $request->tag);
+            });
+        }
+
+        // Filter berdasarkan user (username)
+        if ($request->has('user')) {
+            $query->whereHas('user', function ($q) use ($request) {
+                $q->where('username', $request->user);
+            });
+        }
+
         $posts = $query->paginate(10);
-
-        // Penentuan pesan dinamis berdasarkan keberadaan filter di Query Params
-        $isFiltered = $request->filled('category_id') || $request->filled('user_id') || $request->filled('tag');
-
-        $message = $isFiltered 
-            ? "Daftar postingan berdasarkan filter berhasil diambil, bro!" 
-            : "Daftar semua postingan berhasil diambil, bro!";
 
         return response()->json([
             'success' => true,
-            'message' => $message,
-            'data' => $posts
+            'message' => 'Daftar postingan berhasil diambil.',
+            'data'    => $posts
         ], 200);
     }
 
     /**
-     * 2. GET SINGLE POST BY ID (READ - SHOW)
-     * Mengambil detail satu postingan berdasarkan ID UUID beserta daftar komentar
+     * 2. DETAIL POSTINGAN (SHOW) - DENGAN KOMENTAR BERSARANG
      */
     public function show($id)
     {
         $user = auth('api')->user();
-        $isAdminOrModerator = $user && ($user->isAdmin() || $user->isModerator());
-
-        // Inisialisasi query dasar
+        
         $query = Post::with([
             'user', 
             'category', 
             'tags', 
-            'comments' => function($q) use ($isAdminOrModerator) {
-                $q->whereNull('parent_id')
-                  ->with(['user', 'replies' => function($rq) use ($isAdminOrModerator) {
-                      if ($isAdminOrModerator) {
-                          $rq->with('editHistories');
-                      }
-                  }]);
-                
-                if ($isAdminOrModerator) {
-                    $q->with('editHistories');
-                }
-
-                $q->latest();
+            'comments' => function($query) {
+                $query->whereNull('parent_id') // Ambil komentar utama saja
+                      ->with(['user', 'replies.user'])
+                      ->withCount('likes'); // Eager load user & balasan
             }
-        ]);
+        ])->withCount('likes');
 
-        if ($isAdminOrModerator) {
-            $query->with('editHistories');
+        // Jika yang akses adalah Admin atau Moderator, tampilkan riwayat edit
+        if ($user && ($user->isAdmin() || $user->isModerator())) {
+            $query->with(['edit_histories' => function($q) {
+                $q->with('user')->latest();
+            }]);
         }
 
         $post = $query->find($id);
 
-        // Validasi jika postingan tidak ditemukan
         if (!$post) {
             return response()->json([
                 'success' => false,
@@ -98,14 +85,18 @@ class PostController extends Controller
             ], 404);
         }
 
+        // Increment view count secara otomatis setiap kali detail dibuka
+        $post->increment('view_count');
+
         return response()->json([
             'success' => true,
-            'message' => 'Detail postingan berhasil ditemukan, bro!',
+            'message' => 'Detail postingan berhasil diambil.',
             'data'    => $post
         ], 200);
     }
+
     /**
-     * 3. CREATE POST (STORE)
+     * 3. BUAT POSTINGAN BARU (CREATE)
      */
     public function store(Request $request)
     {
@@ -165,7 +156,7 @@ class PostController extends Controller
     }
 
     /**
-     * 4. EDIT POST (UPDATE)
+     * 4. EDIT POST (UPDATE) - SUDAH FIX 100% TERINTEGRASI USER_ID HISTORY
      */
     public function update(Request $request, $id)
     {
@@ -186,7 +177,7 @@ class PostController extends Controller
             ], 403);
         }
 
-        // Cek batasan edit (maksimal 3 kali)
+        // Cek batasan edit menggunakan kolom edit_count bawaan database (maksimal 3 kali)
         if ($post->edit_count >= 3) {
             return response()->json([
                 'success' => false,
@@ -209,9 +200,10 @@ class PostController extends Controller
             ], 422);
         }
 
-        return DB::transaction(function () use ($request, $post) {
-            // Log history sebelum diupdate
-            $post->editHistories()->create([
+        return DB::transaction(function () use ($request, $post, $user) {
+            // PERBAIKAN: Menyertakan 'user_id' agar log mencatat penanggung jawab perubahan
+            $post->edit_histories()->create([
+                'user_id'     => $user->id, 
                 'old_title'   => $post->title,
                 'new_title'   => $request->title,
                 'old_body'    => $post->body,
@@ -242,17 +234,17 @@ class PostController extends Controller
             return response()->json([
                 'success' => true,
                 'message' => 'Postingan berhasil diperbarui, bro!',
-                'data'    => $post->load(['tags', 'editHistories'])
+                'data'    => $post->load(['tags', 'category'])
             ], 200);
         });
     }
 
     /**
-     * 5. DELETE POST (DESTROY)
+     * 5. HAPUS POSTINGAN (DELETE) - SOFT DELETE
      */
     public function destroy($id)
     {
-        $post = Post::withTrashed()->find($id);
+        $post = Post::find($id);
 
         if (!$post) {
             return response()->json([
@@ -262,35 +254,35 @@ class PostController extends Controller
         }
 
         $user = auth('api')->user();
-        
-        // Cek apakah Admin (Bisa Hard Delete)
-        if ($user->isAdmin()) {
-            $post->tags()->detach();
-            $post->forceDelete(); // Hard delete fisik dari database
+
+        // Otoritas: Cek apakah user adalah pemilik post, Admin, atau Moderator
+        if ($user->id !== $post->user_id && !$user->isAdmin() && !$user->isModerator()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Akses ditolak! Kamu tidak punya wewenang menghapus postingan ini, bro.'
+            ], 403);
+        }
+
+        // Logic: Jika User Biasa (Pemilik) yang hapus -> Soft Delete. Jika Admin/Mod yang hapus -> Force Delete (Hard Delete)
+        if ($user->isAdmin() || $user->isModerator()) {
+            $post->forceDelete(); // Menghapus permanen dari database
             return response()->json([
                 'success' => true,
-                'message' => 'Postingan berhasil dihapus PERMANEN oleh Admin, bro!'
+                'message' => 'Postingan telah dihapus secara PERMANEN oleh Staf, bro!'
             ], 200);
         }
 
-        // Cek apakah Pemilik (Hanya bisa Soft Delete)
-        if ($user->id === $post->user_id) {
-            $post->tags()->detach();
-            $post->delete(); // Soft delete (hanya isi deleted_at)
-            return response()->json([
-                'success' => true,
-                'message' => 'Postingan berhasil dihapus (Soft Delete), bro!'
-            ], 200);
-        }
+        $post->delete(); // Soft delete (hanya isi kolom deleted_at)
 
         return response()->json([
-            'success' => false,
-            'message' => 'Akses ditolak! Kamu tidak punya hak menghapus postingan ini.'
-        ], 403);
+            'success' => true,
+            'message' => 'Postingan berhasil dihapus (Soft Delete), bro!'
+        ], 200);
     }
 
     /**
-     * 6. TOGGLE ACCEPTED ANSWER
+     * 6. MEMILIH JAWABAN TERBAIK (TOGGLE ACCEPTED ANSWER)
+     * POST /api/posts/{postId}/comments/{commentId}/toggle-accepted
      */
     public function toggleAcceptedAnswer(Request $request, $postId, $commentId)
     {
@@ -319,7 +311,7 @@ class PostController extends Controller
             ], 400);
         }
 
-        return DB::transaction(function () use ($post, $comment) {
+        return DB::transaction(function () use ($post, $comment, $user) {
             $oldAcceptedAnswerId = $post->accepted_answer_id;
             $service = app(ReputationService::class);
 
@@ -366,6 +358,11 @@ class PostController extends Controller
             $post->update(['accepted_answer_id' => $comment->id, 'is_answered' => true]);
             $comment->update(['is_accepted' => true]);
 
+            // Kirim Notifikasi ke pemilik jawaban
+            if ($comment->user && $comment->user_id !== $user->id) {
+                $comment->user->notify(new \App\Notifications\AnswerAcceptedNotification($post, $comment, $user));
+            }
+
             if ($comment->user) {
                 $service->awardPoints(
                     $comment->user,
@@ -380,7 +377,91 @@ class PostController extends Controller
                 'success' => true,
                 'message' => 'Mantap! Jawaban terbaik berhasil dipilih.',
                 'data' => ['is_accepted' => true]
-            ]);
+            ], 200);
         });
+    }
+
+    /**
+     * 7. MELIHAT RIWAYAT EDIT POST (Khusus Admin & Moderator)
+     * GET /api/posts/{id}/history
+     */
+    public function viewHistory($id)
+    {
+        $post = Post::find($id);
+        if (!$post) {
+            return response()->json(['success' => false, 'message' => 'Postingan tidak ditemukan.'], 404);
+        }
+
+        $user = auth('api')->user();
+        if (!$user || (!$user->isAdmin() && !$user->isModerator())) {
+            return response()->json(['success' => false, 'message' => 'Akses ditolak! Hanya Staf yang bisa intip riwayat edit, bro.'], 403);
+        }
+
+        $histories = $post->edit_histories()->with('user')->latest()->get();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Log riwayat pengeditan berhasil diambil oleh Staf, bro!',
+            'total_edited' => $histories->count(),
+            'data' => $histories
+        ], 200);
+    }
+
+    /**
+     * 10. TOGGLE ARCHIVE (CLOSE/REOPEN)
+     * POST /api/posts/{id}/toggle-archive
+     */
+    public function toggleArchive($id)
+    {
+        $post = Post::find($id);
+        if (!$post) {
+            return response()->json(['success' => false, 'message' => 'Postingan tidak ditemukan.'], 404);
+        }
+
+        $user = auth('api')->user();
+        if (!$user || $user->id !== $post->user_id) {
+            return response()->json(['success' => false, 'message' => 'Hanya pemilik postingan yang bisa mengarsipkan ini.'], 403);
+        }
+
+        // Jika mau di-close (archive) - Tambahkan syarat harus sudah dijawab (is_answered)
+        if ($post->status !== 'closed' && !$post->is_answered) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Postingan belum bisa ditutup karena belum ada jawaban terbaik yang dipilih, bro.'
+            ], 400);
+        }
+
+        // Jika sudah di-close, mau di-reopen
+        if ($post->status === 'closed') {
+            if ($post->is_closed_permanently) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Postingan sudah terarsip selamanya karena sudah lebih dari 24 jam, bro.'
+                ], 400);
+            }
+
+            $post->update([
+                'status' => 'open',
+                'closed_at' => null
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Postingan berhasil dipublikasikan kembali!',
+                'data' => $post
+            ], 200);
+        }
+
+        // Jika mau di-close (archive)
+        $post->update([
+            'status' => 'closed',
+            'closed_at' => now()
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Postingan berhasil diarsipkan. Kamu punya waktu 24 jam jika ingin membukanya kembali.',
+            'data' => $post
+        ], 200);
     }
 }

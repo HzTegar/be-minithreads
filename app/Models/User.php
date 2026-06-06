@@ -22,8 +22,41 @@ class User extends Authenticatable implements JWTSubject
         'avatar_url',
         'bio',
         'reputation_points',
-        'level', // Kolom level tetap ada
+        'level', // Kolom level bawaan role (admin, moderator, user)
     ];
+
+    /**
+     * DEFINISI TINGKATAN REPUTASI (GELAR)
+     */
+    const RANKS = [
+        ['name' => 'Newbie',   'min_points' => 0],
+        ['name' => 'Regular',  'min_points' => 50],
+        ['name' => 'Pro',      'min_points' => 200],
+        ['name' => 'Expert',   'min_points' => 500],
+        ['name' => 'Master',   'min_points' => 1000],
+        ['name' => 'Legend',   'min_points' => 2500],
+    ];
+
+    protected $appends = ['rank_level'];
+
+    /**
+     * ACCESSOR UNTUK MENDAPATKAN GELAR BERDASARKAN POIN
+     */
+    public function getRankLevelAttribute(): string
+    {
+        $points = $this->reputation_points ?? 0;
+        $currentRank = 'Newbie';
+
+        foreach (self::RANKS as $rank) {
+            if ($points >= $rank['min_points']) {
+                $currentRank = $rank['name'];
+            } else {
+                break;
+            }
+        }
+
+        return $currentRank;
+    }
 
     protected $hidden = [
         'password_hash',
@@ -97,6 +130,11 @@ class User extends Authenticatable implements JWTSubject
     public function comments(): HasMany
     {
         return $this->hasMany(Comment::class);
+        
+    }
+    public function comment_edit_histories()
+    {
+        return $this->hasMany(\App\Models\CommentEditHistory::class, 'user_id');
     }
 
     public function votes(): HasMany

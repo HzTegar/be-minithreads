@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use App\Models\CommentEditHistory;
 
 class Comment extends Model
 {
@@ -32,6 +33,20 @@ class Comment extends Model
         'is_edited' => 'boolean',
     ];
 
+    protected $appends = ['status', 'is_liked'];
+
+    public function getIsLikedAttribute(): bool
+    {
+        $user = auth('api')->user();
+        if (!$user) return false;
+        return $this->likes()->where('user_id', $user->id)->exists();
+    }
+
+    public function getStatusAttribute(): ?string
+    {
+        return $this->is_edited ? 'edited' : null;
+    }
+
     public function post(): BelongsTo
     {
         return $this->belongsTo(Post::class);
@@ -42,9 +57,9 @@ class Comment extends Model
         return $this->belongsTo(User::class);
     }
 
-    public function editHistories(): HasMany
+    public function edit_histories(): HasMany
     {
-        return $this->hasMany(CommentEditHistory::class);
+        return $this->hasMany(CommentEditHistory::class, 'comment_id');
     }
 
     public function parent(): BelongsTo
@@ -67,8 +82,15 @@ class Comment extends Model
         return $this->morphMany(Like::class, 'target');
     }
 
+    public function reports(): MorphMany
+    {
+        return $this->morphMany(Report::class, 'target');
+    }
+
     public function claps(): MorphMany
     {
         return $this->morphMany(Clap::class, 'clapable');
     }
+
+    
 }

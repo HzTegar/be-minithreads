@@ -11,8 +11,12 @@ class PostEditHistory extends Model
 {
     use HasFactory, HasUuids;
 
+    // Tambahkan properti table untuk memastikan nama tabelnya pas
+    protected $table = 'post_edit_histories';
+
     protected $fillable = [
         'post_id',
+        'user_id', 
         'old_title',
         'new_title',
         'old_body',
@@ -20,8 +24,14 @@ class PostEditHistory extends Model
         'edit_number',
     ];
 
+    // TAMBAHKAN INI: Relasi ke model User (Siapa yang mengedit postingan)
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'user_id');
+    }
+
     public function post(): BelongsTo
     {
-        return $this->belongsTo(Post::class);
+        return $this->belongsTo(Post::class, 'post_id');
     }
 }

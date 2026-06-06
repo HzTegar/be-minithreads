@@ -5,9 +5,10 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Post;
 use App\Models\Comment;
+use App\Models\CommentEditHistory;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
-use Illuminate\Support\Facades\Gate;
 
 class CommentController extends Controller
 {
@@ -25,6 +26,14 @@ class CommentController extends Controller
                 'success' => false,
                 'message' => 'Postingan tidak ditemukan.'
             ], 404);
+        }
+
+        // Proteksi: Tidak boleh komen di postingan yang sudah di-close (archived)
+        if ($post->status === 'closed') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Postingan ini sudah diarsipkan/ditutup, kamu tidak bisa menambah komentar lagi, bro.'
+            ], 403);
         }
 
         // 2. Validasi input body komentar & parent_id
@@ -66,6 +75,20 @@ class CommentController extends Controller
             'is_accepted' => false, 
         ]);
 
+        // --- LOGIKA NOTIFIKASI ---
+        if ($request->filled('parent_id')) {
+            // Jika ini adalah REPLY
+            $parentComment = Comment::find($request->parent_id);
+            if ($parentComment && $parentComment->user_id !== $user->id) {
+                $parentComment->user->notify(new \App\Notifications\CommentRepliedNotification($post, $comment, $user));
+            }
+        } else {
+            // Jika ini adalah KOMENTAR UTAMA
+            if ($post->user_id !== $user->id) {
+                $post->user->notify(new \App\Notifications\NewCommentNotification($post, $comment, $user));
+            }
+        }
+
         // 6. Kondisional pesan sukses
         $message = $request->filled('parent_id')
             ? 'Balasan kamu berhasil dikirim, bro!'
@@ -82,91 +105,158 @@ class CommentController extends Controller
     /**
      * MENGEDIT ISI KOMENTAR / JAWABAN
      * PUT /api/comments/{id}
-     * Batasan: Hanya pemilik, dan hanya boleh 1 kali edit per postingan untuk 1 akun
      */
     public function update(Request $request, $id)
     {
-        // 1. Validasi Input Body
-        $validator = Validator::make($request->all(), [
-            'body' => 'required|string'
-        ]);
+        // 1. Cari komentar berdasarkan ID UUID
+        $comment = Comment::find($id);
 
-        if ($validator->fails()) {
+        if (!$comment) {
             return response()->json([
                 'success' => false,
-                'errors'  => $validator->errors()
-            ], 422);
+                'message' => 'Komentar tidak ditemukan, bro.'
+            ], 404);
         }
 
-        // Ambil data komentar yang mau diedit beserta data post-nya
-        $comment = Comment::findOrFail($id);
-
-        // 2. Proteksi Keamanan: Cek hak akses menggunakan Policy (CommentPolicy)
-        if (Gate::denies('update', $comment)) {
+        // 2. Ambil data user yang sedang login
+        $user = auth('api')->user();
+        
+        // Proteksi: Hanya pemilik asli komentar yang boleh mengedit kodenya
+        if (!$user || $user->id !== $comment->user_id) {
             return response()->json([
                 'success' => false,
-                'message' => 'Kamu tidak berhak mengedit komentar ini, bro!'
+                'message' => 'Akses ditolak! Kamu bukan pemilik komentar ini, bro.'
             ], 403);
         }
 
-        // 3. Logika Batasan Forum: Cek apakah komentar ini sudah pernah diedit
-        if ($comment->is_edited) {
+        // --- FIX: BATASAN EDIT KOMENTAR (MAKSIMAL 1 KALI) ---
+        // Kita cek jumlah history edit yang sudah ada
+        if ($comment->edit_histories()->count() >= 1) {
             return response()->json([
                 'success' => false,
                 'message' => 'Slot edit habis! Kamu hanya dibatasi mengedit komentar 1 kali per postingan, bro.'
             ], 400);
         }
 
-        return \Illuminate\Support\Facades\DB::transaction(function () use ($request, $comment) {
-            // Log history sebelum diupdate
-            $comment->editHistories()->create([
-                'old_body' => $comment->body,
-                'new_body' => $request->body,
+        // 3. Validasi input teks body (disesuaikan menggunakan 'body' bukan 'content')
+        $validator = Validator::make($request->all(), [
+            'body' => 'required|string', 
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        // 4. Jika isinya sama persis dengan yang lama, tidak perlu disimpan ke history
+        if ($comment->body === $request->body) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Tidak ada perubahan pada komentar, bro!',
+                'data' => $comment
+            ], 200);
+        }
+
+        // 5. Gunakan Database Transaction agar proses aman dan tidak korup di database
+        return DB::transaction(function () use ($request, $comment, $user) {
+            
+            // Hitung ini adalah editan yang ke-berapa untuk komentar ini
+            $nextEditNumber = $comment->edit_histories()->count() + 1;
+
+            // Simpan data lama ke tabel comment_edit_histories sebelum data utama berubah
+            $comment->edit_histories()->create([
+                'user_id'     => $user->id,
+                'old_content' => $comment->body,        // FIX: mengambil dari properti $comment->body yang ada di database
+                'new_content' => $request->body,        // FIX: mengambil dari input $request->body
+                'edit_number' => $nextEditNumber,   
             ]);
 
-            // 4. Eksekusi Perubahan Data
+            // Update isi komentar utama dan ubah is_edited menjadi true (1)
             $comment->update([
-                'body'      => $request->body,
-                'is_edited' => true,
+                'body'      => $request->body,          // FIX: mengubah kolom 'body' pada tabel comments
+                'is_edited' => true,                    // Label penanda "edited" aktif!
             ]);
 
             return response()->json([
                 'success' => true,
-                'message' => 'Komentar berhasil diperbarui, bro!',
-                'data'    => [
-                    'id'        => $comment->id,
-                    'body'      => $comment->body,
-                    'is_edited' => true,
-                    'status'    => 'edited'
-                ]
+                'message' => 'Komentar berhasil diperbarui dan riwayat telah dicatat, bro!',
+                'data'     => $comment
             ], 200);
         });
     }
 
     /**
-     * MENGHAPUS KOMENTAR / JAWABAN (SOFT DELETE)
+     * MENGHAPUS KOMENTAR / JAWABAN
      * DELETE /api/comments/{id}
-     * Batasan: Hanya untuk Admin dan Moderator
      */
     public function destroy($id)
     {
-        $comment = Comment::findOrFail($id);
+        // 1. Cari komentarnya di database
+        $comment = Comment::find($id);
 
-        // Proteksi Keamanan: Cek hak akses menggunakan Policy (CommentPolicy)
-        // Memastikan hanya user dengan role 'admin' atau 'moderator' yang bisa lewat
-        if (Gate::denies('delete', $comment)) {
+        if (!$comment) {
             return response()->json([
                 'success' => false,
-                'message' => 'Akses ditolak! Hanya Admin atau Moderator yang bisa menghapus komentar ini.'
+                'message' => 'Komentar tidak ditemukan, bro.'
+            ], 404);
+        }
+
+        // 2. Ambil data user admin yang sedang login
+        $user = auth('api')->user();
+
+        // Validasi Otoritas: Kunci akses hanya untuk Admin
+        if (!$user || !$user->isAdmin()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Akses ditolak! Hanya Admin yang bisa menghapus komentar, bro.'
             ], 403);
         }
 
-        // Eksekusi Soft Delete (Hanya mengisi kolom deleted_at di database tanpa menghapus fisik)
+        // 3. Jalankan perintah hapus
         $comment->delete();
 
         return response()->json([
             'success' => true,
-            'message' => 'Komentar berhasil dihapus oleh staf (Soft Delete), bro!'
+            'message' => 'Komentar berhasil dihapus secara permanen oleh Admin, bro!'
         ], 200);
     }
-}
+
+    /**
+     * Melihat Log Riwayat Edit Komentar (Khusus Admin & Moderator)
+     * URL: GET /api/comments/{id}/history
+     */
+    public function viewHistory($id)
+    {
+        // 1. Pastikan komentarnya eksis
+        $comment = Comment::find($id);
+        if (!$comment) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Komentar tidak ditemukan, bro.'
+            ], 404);
+        }
+
+        // 2. Ambil user yang merequest
+        $user = auth('api')->user();
+
+        // Proteksi: Cek apakah pengintip log ini adalah Admin atau Moderator
+        if (!$user || (!$user->isAdmin() && !$user->isModerator())) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Akses ditolak! Log riwayat edit ini rahasia, hanya untuk Admin/Moderator, bro.'
+            ], 403);
+        }
+
+        // 3. Ambil seluruh riwayat editan komentar ini beserta data user yang mengubahnya
+        $histories = $comment->edit_histories()->with('user')->latest()->get();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Log riwayat komentar berhasil diambil, bro!',
+            'total_edited' => $histories->count(),
+            'data' => $histories
+        ], 200);
+    }
+}    

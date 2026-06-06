@@ -93,6 +93,11 @@ class VoteController extends Controller
 
         $this->adjustScoreAndPoints($model, $request->vote_type, 'new');
 
+        // Kirim Notifikasi jika UPVOTE pada POSTINGAN
+        if ($request->vote_type === 'up' && $request->target_type === 'post') {
+            $model->user->notify(new \App\Notifications\PostVotedNotification($model, $user));
+        }
+
         // REFRESH DATA MEMORI AGAR SINKRON DENGAN DATABASE FISIK
         $model->refresh(); 
 
