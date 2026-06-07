@@ -110,6 +110,43 @@ describe('MiniThreads API Features Logic Test', () => {
 
     // 3. POST FEATURES & ACCEPTED ANSWER LOGIC
     context('Post Features & Accepted Answer', () => {
+        it('should earn enough points to post (New Logic)', () => {
+            // Find any existing post to like/vote
+            cy.request('GET', '/api/posts').then((res) => {
+                const posts = res.body.data.data || res.body.data;
+                const targetPost = Array.isArray(posts) ? posts[0] : null;
+
+                if (targetPost) {
+                    // Like (+10)
+                    cy.request({
+                        method: 'POST',
+                        url: '/api/like',
+                        headers: { Authorization: `Bearer ${authToken}` },
+                        body: { target_id: targetPost.id, target_type: 'post' }
+                    });
+
+                    // Upvote (+5)
+                    cy.request({
+                        method: 'POST',
+                        url: '/api/vote',
+                        headers: { Authorization: `Bearer ${authToken}` },
+                        body: { target_id: targetPost.id, target_type: 'post', vote_type: 'up' }
+                    });
+
+                    // One more Like on another post or just another activity to reach 20
+                    // Let's just upvote a second post if available
+                    if (posts.length > 1) {
+                        cy.request({
+                            method: 'POST',
+                            url: '/api/vote',
+                            headers: { Authorization: `Bearer ${authToken}` },
+                            body: { target_id: posts[1].id, target_type: 'post', vote_type: 'up' }
+                        });
+                    }
+                }
+            });
+        });
+
         it('should create a new post', () => {
             // Ensure we have a category id
             if (!testCategoryId) {

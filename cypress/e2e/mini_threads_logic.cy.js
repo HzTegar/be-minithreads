@@ -35,6 +35,29 @@ describe('MiniThreads API Logic Unified Test', () => {
          password: "password123",
      }).then((response) => {
          userToken = response.body.access_token;
+
+         // 4. BIAR USER PUNYA POIN (MINIMAL 20) UNTUK POSTING
+         // Admin buat 2 post pancingan
+         for (let i = 1; i <= 2; i++) {
+             cy.request({
+                 method: 'POST',
+                 url: `${baseUrl}/posts`,
+                 headers: { Authorization: `Bearer ${adminToken}` },
+                 body: {
+                     category_id: categoryId,
+                     title: 'Post Pancingan ' + i,
+                     body: 'Admin buat post untuk di-like user'
+                 }
+             }).then((pRes) => {
+                 // User Like post admin (+10 poin x 2 = 20 poin)
+                 cy.request({
+                     method: 'POST',
+                     url: `${baseUrl}/like`,
+                     headers: { Authorization: `Bearer ${userToken}` },
+                     body: { target_id: pRes.body.data.id, target_type: 'post' }
+                 });
+             });
+         }
      });
  });
 

@@ -57,9 +57,36 @@ describe('MiniThreads Definitive Master Test', () => {
     it('Should login as fixed Admin and User for further testing', () => {
       cy.request('POST', `${baseUrl}/auth/login`, adminCreds).then((res) => {
         adminToken = res.body.access_token;
-      });
-      cy.request('POST', `${baseUrl}/auth/login`, userCreds).then((res) => {
-        userToken = res.body.access_token;
+
+        cy.request('POST', `${baseUrl}/auth/login`, userCreds).then((uRes) => {
+          userToken = uRes.body.access_token;
+
+          // BIAR USER PUNYA POIN (MINIMAL 20)
+          // Admin buat Category sementera jika belum ada (atau pakai yang nanti dibuat, tapi ini butuh kategori)
+          // Pakai pancingan admin post
+          for (let i = 1; i <= 2; i++) {
+            cy.request({
+              method: 'POST',
+              url: `${baseUrl}/posts`,
+              headers: { Authorization: `Bearer ${adminToken}` },
+              body: {
+                category_id: '019e9cef-2c3b-7104-b641-4d7544305ec2', // Dummy ID but it works if seeder run
+                title: 'Pancingan Poin ' + i,
+                body: 'Admin post'
+              },
+              failOnStatusCode: false // Category might not exist yet, let's create it first if needed
+            }).then((p) => {
+              if (p.status === 201) {
+                cy.request({
+                  method: 'POST',
+                  url: `${baseUrl}/like`,
+                  headers: { Authorization: `Bearer ${userToken}` },
+                  body: { target_id: p.body.data.id, target_type: 'post' }
+                });
+              }
+            });
+          }
+        });
       });
     });
   });

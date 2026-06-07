@@ -48,6 +48,28 @@ describe('MiniThreads API & Logic Features Test', () => {
     // 3. Ambil Category ID valid
     cy.request('GET', '/api/categories').then((res) => {
         categoryId = res.body.data[0].id;
+
+        // BIAR USER PUNYA POIN (MINIMAL 20)
+        // Admin buat 2 post pancingan
+        for (let i = 1; i <= 2; i++) {
+          cy.request({
+            method: 'POST',
+            url: '/api/posts',
+            headers: { Authorization: `Bearer ${adminToken}` },
+            body: {
+              category_id: categoryId,
+              title: 'Pancingan Poin ' + i,
+              body: 'Admin post'
+            }
+          }).then((p) => {
+            cy.request({
+              method: 'POST',
+              url: '/api/like',
+              headers: { Authorization: `Bearer ${userToken}` },
+              body: { target_id: p.body.data.id, target_type: 'post' }
+            });
+          });
+        }
     });
   });
 

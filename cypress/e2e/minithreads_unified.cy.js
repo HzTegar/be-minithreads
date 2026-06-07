@@ -46,6 +46,28 @@ describe('MiniThreads Unified API Logic Test', () => {
     login(userCreds).then((res) => {
       if (res.status === 200) {
         userToken = res.body.access_token;
+
+        // BIAR USER PUNYA POIN (MINIMAL 20)
+        // Admin buat 2 post pancingan
+        for (let i = 1; i <= 2; i++) {
+          cy.request({
+            method: 'POST',
+            url: `${baseUrl}/posts`,
+            headers: { Authorization: `Bearer ${adminToken}` },
+            body: {
+              category_id: categoryId,
+              title: 'Pancingan Poin ' + i,
+              body: 'Admin post'
+            }
+          }).then((p) => {
+            cy.request({
+              method: 'POST',
+              url: `${baseUrl}/like`,
+              headers: { Authorization: `Bearer ${userToken}` },
+              body: { target_id: p.body.data.id, target_type: 'post' }
+            });
+          });
+        }
       }
     });
   });

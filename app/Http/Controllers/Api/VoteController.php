@@ -6,8 +6,10 @@ use App\Http\Controllers\Controller;
 use App\Models\Post;
 use App\Models\Comment;
 use App\Models\Vote;
+use App\Services\ReputationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\DB;
 
 class VoteController extends Controller
 {
@@ -29,7 +31,7 @@ class VoteController extends Controller
 
         $user = auth('api')->user();
 
-        // 2. Tentukan Model Target menggunakan Eager Loading 'user' agar relasinya pasti termuat
+        // 2. Tentukan Model Target
         if ($request->target_type === 'post') {
             $model = Post::with('user')->find($request->target_id);
             $modelName = Post::class;
@@ -53,87 +55,105 @@ class VoteController extends Controller
             ], 403);
         }
 
-        // 3. Cek Riwayat Vote
-        $existingVote = Vote::where('user_id', $user->id)
-                            ->where('target_id', $model->id)
-                            ->where('target_type', $modelName)
-                            ->first();
+        return DB::transaction(function () use ($request, $user, $model, $modelName) {
+            $service = app(ReputationService::class);
+            $targetLabel = ($request->target_type === 'post') ? 'postingan' : 'komentar';
 
-        if ($existingVote) {
-            // JIKA SAMA: Batal Vote (Toggle Off)
-            if ($existingVote->vote_type === $request->vote_type) {
-                $this->adjustScoreAndPoints($model, $existingVote->vote_type, 'cancel');
-                $existingVote->delete();
+            // 3. Cek Riwayat Vote
+            $existingVote = Vote::where('user_id', $user->id)
+                                ->where('target_id', $model->id)
+                                ->where('target_type', $modelName)
+                                ->first();
+
+            if ($existingVote) {
+                // JIKA SAMA: Batal Vote (Toggle Off)
+                if ($existingVote->vote_type === $request->vote_type) {
+                    $this->adjustScoreAndPoints($model, $user, $existingVote->vote_type, 'cancel', $service);
+                    $existingVote->delete();
+
+                    return response()->json([
+                        'success' => true,
+                        'message' => 'Vote kamu berhasil dibatalkan, bro!',
+                        'vote_score' => $model->vote_score
+                    ], 200);
+                }
+
+                // JIKA BEDA: Ganti Pilihan Vote
+                $this->adjustScoreAndPoints($model, $user, $request->vote_type, 'switch', $service);
+                $existingVote->update(['vote_type' => $request->vote_type]);
 
                 return response()->json([
                     'success' => true,
-                    'message' => 'Vote kamu berhasil dibatalkan, bro!',
+                    'message' => 'Vote kamu berhasil diubah, bro!',
                     'vote_score' => $model->vote_score
                 ], 200);
             }
 
-            // JIKA BEDA: Ganti Pilihan Vote
-            $this->adjustScoreAndPoints($model, $request->vote_type, 'switch');
-            $existingVote->update(['vote_type' => $request->vote_type]);
+            // 4. JIKA BELUM PERNAH VOTE: Buat data baru
+            Vote::create([
+                'user_id'     => $user->id,
+                'target_id'   => $model->id,
+                'target_type' => $modelName,
+                'vote_type'   => $request->vote_type
+            ]);
+
+            $this->adjustScoreAndPoints($model, $user, $request->vote_type, 'new', $service);
+
+            // Kirim Notifikasi jika UPVOTE pada POSTINGAN
+            if ($request->vote_type === 'up' && $request->target_type === 'post') {
+                $model->user->notify(new \App\Notifications\PostVotedNotification($model, $user));
+            }
+
+            // REFRESH DATA MEMORI AGAR SINKRON DENGAN DATABASE FISIK
+            $model->refresh(); 
 
             return response()->json([
                 'success' => true,
-                'message' => 'Vote kamu berhasil diubah, bro!',
+                'message' => 'Vote berhasil dicatat, bro!',
                 'vote_score' => $model->vote_score
-            ], 200);
-        }
-
-      // 4. JIKA BELUM PERNAH VOTE: Buat data baru
-        Vote::create([
-            'user_id'     => $user->id,
-            'target_id'   => $model->id,
-            'target_type' => $modelName,
-            'vote_type'   => $request->vote_type
-        ]);
-
-        $this->adjustScoreAndPoints($model, $request->vote_type, 'new');
-
-        // Kirim Notifikasi jika UPVOTE pada POSTINGAN
-        if ($request->vote_type === 'up' && $request->target_type === 'post') {
-            $model->user->notify(new \App\Notifications\PostVotedNotification($model, $user));
-        }
-
-        // REFRESH DATA MEMORI AGAR SINKRON DENGAN DATABASE FISIK
-        $model->refresh(); 
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Vote berhasil dicatat, bro!',
-            'vote_score' => $model->vote_score
-        ], 201);
+            ], 201);
+        });
     }
 
     /**
      * FUNGSI PEMBANTU: Kalkulasi Skor Konten & Poin Reputasi
      */
-    private function adjustScoreAndPoints($model, $voteType, $action)
+    private function adjustScoreAndPoints($model, $voter, $voteType, $action, $service)
     {
-        // Menggunakan opsi alternatif relasi yang lebih aman dari crash memory
-        $author = $model->user; 
-        
         $scoreChange = ($voteType === 'up') ? 1 : -1;
-        $pointChange = ($voteType === 'up') ? 5 : -2; 
+        
+        // Poin untuk VETER (yang melakukan voting)
+        $points = ($voteType === 'up') ? ReputationService::POINTS_VOTE : ReputationService::POINTS_DOWNVOTE;
+        $actionLabel = ($voteType === 'up') ? 'upvote' : 'downvote';
+        $targetName = ($model instanceof Post) ? "post: {$model->title}" : "komentar";
 
         if ($action === 'cancel') {
             $model->decrement('vote_score', $scoreChange);
-            // Pastikan model relasi author ditemukan sebelum memanggil fungsi increment/decrement
-            if ($author && isset($author->points)) {
-                $author->decrement('points', $pointChange);
+            
+            // Kebalikan dari aksinya
+            if ($voteType === 'up') {
+                $service->deductPoints($voter, $points, "cancel_{$actionLabel}", $model->id, "Batal {$actionLabel} pada {$targetName}");
+            } else {
+                // Downvote yang dibatalkan -> kasih poin balik (deduct dari minus = add)
+                $service->awardPoints($voter, $points, "cancel_{$actionLabel}", $model->id, "Batal {$actionLabel} pada {$targetName}");
             }
         } elseif ($action === 'switch') {
             $model->increment('vote_score', $scoreChange * 2);
-            if ($author && isset($author->points)) {
-                $author->increment('points', $pointChange * 2);
+            
+            if ($voteType === 'up') {
+                // Switch from Down to Up: +5 (remove downvote) +5 (add upvote) = +10
+                $service->awardPoints($voter, ReputationService::POINTS_VOTE + ReputationService::POINTS_DOWNVOTE, "switch_to_{$actionLabel}", $model->id, "Ganti ke {$actionLabel} pada {$targetName}");
+            } else {
+                // Switch from Up to Down: -5 (remove upvote) -5 (add downvote) = -10
+                $service->deductPoints($voter, ReputationService::POINTS_VOTE + ReputationService::POINTS_DOWNVOTE, "switch_to_{$actionLabel}", $model->id, "Ganti ke {$actionLabel} pada {$targetName}");
             }
         } else {
             $model->increment('vote_score', $scoreChange);
-            if ($author && isset($author->points)) {
-                $author->increment('points', $pointChange);
+            
+            if ($voteType === 'up') {
+                $service->awardPoints($voter, $points, "new_{$actionLabel}", $model->id, "Memberikan {$actionLabel} pada {$targetName}");
+            } else {
+                $service->deductPoints($voter, $points, "new_{$actionLabel}", $model->id, "Memberikan {$actionLabel} pada {$targetName}");
             }
         }
     }

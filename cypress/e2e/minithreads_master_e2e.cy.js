@@ -61,6 +61,26 @@ describe('MiniThreads Master E2E Test Suite', () => {
                             }).then(catRes => {
                                 const categoryId = catRes.body.data.id;
 
+                                // BIAR USER1 PUNYA POIN (MINIMAL 20) UNTUK POSTING
+                                // Admin buat 2 post pancingan
+                                cy.request({
+                                    method: 'POST',
+                                    url: `${baseUrl}/posts`,
+                                    headers: { Authorization: `Bearer ${tokenAdmin}` },
+                                    body: { category_id: categoryId, title: 'Bait 1', body: '...' }
+                                }).then(p1 => {
+                                    cy.request({ method: 'POST', url: `${baseUrl}/like`, headers: { Authorization: `Bearer ${token1}` }, body: { target_id: p1.body.data.id, target_type: 'post' } });
+                                    cy.request({ method: 'POST', url: `${baseUrl}/vote`, headers: { Authorization: `Bearer ${token1}` }, body: { target_id: p1.body.data.id, target_type: 'post', vote_type: 'up' } });
+                                });
+                                cy.request({
+                                    method: 'POST',
+                                    url: `${baseUrl}/posts`,
+                                    headers: { Authorization: `Bearer ${tokenAdmin}` },
+                                    body: { category_id: categoryId, title: 'Bait 2', body: '...' }
+                                }).then(p2 => {
+                                    cy.request({ method: 'POST', url: `${baseUrl}/like`, headers: { Authorization: `Bearer ${token1}` }, body: { target_id: p2.body.data.id, target_type: 'post' } });
+                                });
+
                                 cy.request({
                                     method: 'POST',
                                     url: `${baseUrl}/posts`,

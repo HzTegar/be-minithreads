@@ -124,6 +124,14 @@ class PostController extends Controller
             ], 401);
         }
 
+        // CEK BATASAN POIN: Minimal 20 poin untuk posting (Kecuali Admin/Moderator)
+        if (!$user->isAdmin() && !$user->isModerator() && $user->reputation_points < ReputationService::MIN_POINTS_TO_POST) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Waduh! Poin kamu belum cukup untuk posting, bro. Minimal kamu harus punya ' . ReputationService::MIN_POINTS_TO_POST . ' poin. Yuk, aktif dulu ngevote atau ngelike konten orang lain!'
+            ], 403);
+        }
+
         return DB::transaction(function () use ($request, $user) {
             $post = $user->posts()->create([
                 'category_id' => $request->category_id,

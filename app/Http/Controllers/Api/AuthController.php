@@ -38,10 +38,14 @@ class AuthController extends Controller
             'level'         => 'user', 
         ]);
 
+        $token = auth('api')->login($user);
+
         return response()->json([
             'success' => true,
             'message' => 'User berhasil didaftarkan sebagai member!',
-            'user'    => $user
+            'user'    => $user,
+            'access_token' => $token,
+            'token_type'   => 'bearer',
         ], 201);
     }
 
