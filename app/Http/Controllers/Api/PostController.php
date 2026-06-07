@@ -19,7 +19,7 @@ class PostController extends Controller
      */
     public function index(Request $request)
     {
-        $query = Post::with(['user', 'category', 'tags'])->latest();
+        $query = Post::with(['user', 'category', 'tags', 'comments.user'])->withCount('comments')->latest();
 
         // Filter berdasarkan kategori (slug)
         if ($request->has('category')) {

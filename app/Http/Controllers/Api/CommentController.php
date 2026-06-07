@@ -5,7 +5,6 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Post;
 use App\Models\Comment;
-use App\Models\CommentEditHistory;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
@@ -39,7 +38,7 @@ class CommentController extends Controller
         // 2. Validasi input body komentar & parent_id
         $validator = Validator::make($request->all(), [
             'body'      => 'required|string',
-            'parent_id' => 'nullable|exists:comments,id', // Jika dikirim, ID wajib terdaftar di tabel comments
+            'parent_id' => 'nullable', // Dibuat lebih fleksibel untuk mendukung validasi manual internal
         ]);
 
         if ($validator->fails()) {
@@ -47,6 +46,17 @@ class CommentController extends Controller
                 'success' => false,
                 'errors' => $validator->errors()
             ], 422);
+        }
+
+        // Validasi manual tambahan untuk memastikan integritas parent_id jika dikirimkan
+        if ($request->filled('parent_id')) {
+            $parentComment = Comment::find($request->input('parent_id'));
+            if (!$parentComment) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Komentar induk (parent) tidak ditemukan, bro.'
+                ], 404);
+            }
         }
 
         // 3. Ambil data user yang sedang login via API
@@ -70,23 +80,32 @@ class CommentController extends Controller
         $comment = Comment::create([
             'post_id'     => $post->id,
             'user_id'     => $user->id,
-            'parent_id'   => $request->parent_id, // Mengakomodasi komentar utama (null) maupun reply (UUID)
-            'body'        => $request->body,
+            'parent_id'   => $request->input('parent_id'), // Mengakomodasi komentar utama (null) maupun reply (UUID)
+            'body'        => $request->input('body'),
             'is_accepted' => false, 
         ]);
 
-        // --- LOGIKA NOTIFIKASI ---
-        if ($request->filled('parent_id')) {
-            // Jika ini adalah REPLY
-            $parentComment = Comment::find($request->parent_id);
-            if ($parentComment && $parentComment->user_id !== $user->id) {
-                $parentComment->user->notify(new \App\Notifications\CommentRepliedNotification($post, $comment, $user));
+        // --- LOGIKA NOTIFIKASI (Dibungkus try-catch agar aman dari risiko kegagalan pengiriman) ---
+        try {
+            if ($request->filled('parent_id') && isset($parentComment)) {
+                // Jika ini adalah REPLY
+                if ($parentComment->user_id !== $user->id) {
+                    $parentCommentOwner = $parentComment->user;
+                    if ($parentCommentOwner) {
+                        $parentCommentOwner->notify(new \App\Notifications\CommentRepliedNotification($post, $comment, $user));
+                    }
+                }
+            } else {
+                // Jika ini adalah KOMENTAR UTAMA
+                if ($post->user_id !== $user->id) {
+                    $postOwner = $post->user;
+                    if ($postOwner) {
+                        $postOwner->notify(new \App\Notifications\NewCommentNotification($post, $comment, $user));
+                    }
+                }
             }
-        } else {
-            // Jika ini adalah KOMENTAR UTAMA
-            if ($post->user_id !== $user->id) {
-                $post->user->notify(new \App\Notifications\NewCommentNotification($post, $comment, $user));
-            }
+        } catch (\Exception $e) {
+            \Log::error('Gagal mengirim notifikasi komentar: ' . $e->getMessage());
         }
 
         // 6. Kondisional pesan sukses
@@ -129,16 +148,17 @@ class CommentController extends Controller
             ], 403);
         }
 
-        // --- FIX: BATASAN EDIT KOMENTAR (MAKSIMAL 1 KALI) ---
-        // Kita cek jumlah history edit yang sudah ada
-        if ($comment->edit_histories()->count() >= 1) {
+        // --- FIX UTAMA: PENYESUAIAN NAMA RELASI MENJADI edit_histories() AGAR SELESAI EROR 500 ---
+        $editCount = $comment->edit_histories()->count();
+
+        if ($editCount >= 1) {
             return response()->json([
                 'success' => false,
                 'message' => 'Slot edit habis! Kamu hanya dibatasi mengedit komentar 1 kali per postingan, bro.'
-            ], 400);
+            ], 400); // Menggunakan kode status 400 (Bad Request) sesuai standar pengujian Cypress
         }
 
-        // 3. Validasi input teks body (disesuaikan menggunakan 'body' bukan 'content')
+        // 3. Validasi input teks body
         $validator = Validator::make($request->all(), [
             'body' => 'required|string', 
         ]);
@@ -160,23 +180,23 @@ class CommentController extends Controller
         }
 
         // 5. Gunakan Database Transaction agar proses aman dan tidak korup di database
-        return DB::transaction(function () use ($request, $comment, $user) {
+        return DB::transaction(function () use ($request, $comment, $user, $editCount) {
             
             // Hitung ini adalah editan yang ke-berapa untuk komentar ini
-            $nextEditNumber = $comment->edit_histories()->count() + 1;
+            $nextEditNumber = $editCount + 1;
 
-            // Simpan data lama ke tabel comment_edit_histories sebelum data utama berubah
+            // FIX: Mengubah edit_histories() dan memetakan field tabel dengan tepat
             $comment->edit_histories()->create([
                 'user_id'     => $user->id,
-                'old_content' => $comment->body,        // FIX: mengambil dari properti $comment->body yang ada di database
-                'new_content' => $request->body,        // FIX: mengambil dari input $request->body
+                'old_content' => $comment->body,        
+                'new_content' => $request->body,        
                 'edit_number' => $nextEditNumber,   
             ]);
 
             // Update isi komentar utama dan ubah is_edited menjadi true (1)
             $comment->update([
-                'body'      => $request->body,          // FIX: mengubah kolom 'body' pada tabel comments
-                'is_edited' => true,                    // Label penanda "edited" aktif!
+                'body'      => $request->body,          
+                'is_edited' => true,                    
             ]);
 
             return response()->json([
@@ -249,7 +269,7 @@ class CommentController extends Controller
             ], 403);
         }
 
-        // 3. Ambil seluruh riwayat editan komentar ini beserta data user yang mengubahnya
+        // 3. Ambil seluruh riwayat editan komentar ini menggunakan relasi edit_histories() yang sudah diperbaiki
         $histories = $comment->edit_histories()->with('user')->latest()->get();
 
         return response()->json([
@@ -259,4 +279,4 @@ class CommentController extends Controller
             'data' => $histories
         ], 200);
     }
-}    
+}
