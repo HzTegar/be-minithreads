@@ -15,20 +15,21 @@ use App\Http\Controllers\Api\ReportController;
 use App\Http\Controllers\Api\SearchController;
 use Illuminate\Support\Facades\Route;
 
-
 /*
 |--------------------------------------------------------------------------
 | API Routes
 |--------------------------------------------------------------------------
 */
 
-// 1. RUTE PUBLIK (Tanpa Login)
+// ==========================================
+// 1. RUTE PUBLIK (Tanpa Login) 
+// ==========================================
+
 Route::group(['prefix' => 'auth'], function () {
     Route::post('register', [AuthController::class, 'register']);
     Route::post('login', [AuthController::class, 'login']);
 });
 
-// FITUR SEARCH (Publik)
 Route::group(['prefix' => 'search'], function () {
     Route::get('global', [SearchController::class, 'searchGlobal']);
     Route::get('posts', [SearchController::class, 'searchPosts']);
@@ -37,6 +38,7 @@ Route::group(['prefix' => 'search'], function () {
     Route::get('categories', [SearchController::class, 'searchCategories']);
 });
 
+// Konten Publik (Read-Only)
 Route::get('posts', [PostController::class, 'index']);
 Route::get('posts/{id}', [PostController::class, 'show']);
 
@@ -47,7 +49,10 @@ Route::get('categories', [CategoryController::class, 'index']);
 Route::get('categories/{id}', [CategoryController::class, 'show']);
 
 
-// 2. RUTE PROTECTED (Wajib Login dengan JWT)
+// ==========================================
+// 2. RUTE PROTECTED (Wajib Login JWT)
+// ==========================================
+
 Route::middleware('auth:api')->group(function () {
     
     // Auth & Profile
@@ -57,85 +62,73 @@ Route::middleware('auth:api')->group(function () {
         Route::get('admin/dashboard', [AuthController::class, 'dashboard']);
     });
     
-    // Rute untuk melihat seluruh daftar postingan yang disimpan
-    Route::get('/bookmarks', [BookmarkController::class, 'index']);
-    
-    // Rute untuk melakukan aksi simpan/batal simpan bookmark
-    Route::post('/posts/{postId}/bookmark', [BookmarkController::class, 'toggle']);
-
-    Route::get('/posts/{id}/history', [PostController::class, 'viewHistory']);
-    Route::post('/posts/{id}/toggle-archive', [PostController::class, 'toggleArchive']);
-
     Route::post('profile/update', [ProfileController::class, 'updateProfile']);
 
-    // Social
-    Route::post('user/follow/{id}', [FollowController::class, 'toggleFollow']);
+    // Bookmarks
+    Route::get('/bookmarks', [BookmarkController::class, 'index']);
+    Route::post('/posts/{postId}/bookmark', [BookmarkController::class, 'toggle']);
 
-    // Posts Management
+    // Posts Management (User Biasa)
     Route::post('posts', [PostController::class, 'store']);
     Route::put('posts/{id}', [PostController::class, 'update']);
     Route::delete('posts/{id}', [PostController::class, 'destroy']);
+    Route::get('/posts/{id}/history', [PostController::class, 'viewHistory']);
+    Route::post('/posts/{id}/toggle-archive', [PostController::class, 'toggleArchive']);
     Route::post('/posts/{postId}/comments/{commentId}/toggle-accepted', [PostController::class, 'toggleAcceptedAnswer']);
-    
-    // KITA SUDAH PINDAHKAN RUTE SEARCH DARI SINI KE ATAS 🚀
 
-    // Tags Management (Hanya Admin)
-    Route::middleware('role:admin')->group(function () {
-        Route::post('tags', [TagController::class, 'store']);
-        Route::put('tags/{id}', [TagController::class, 'update']);
-        Route::delete('tags/{id}', [TagController::class, 'destroy']);
-    });
-
-    // Dummy Route for Admin/Moderator Test
-    Route::middleware('role:admin,moderator')->group(function () {
-        Route::post('threads/delete-palsu', function () {
-            return response()->json(['message' => 'Thread berhasil dihapus oleh Moderator/Admin.']);
-        });
-    });
-    
-    Route::middleware('auth:api')->group(function () {
-        // Rute untuk melihat seluruh daftar postingan yang disimpan
-        Route::get('/bookmarks', [BookmarkController::class, 'index']);
-        
-        // Rute untuk melakukan aksi simpan/batal simpan bookmark
-        Route::post('/posts/{postId}/bookmark', [BookmarkController::class, 'toggle']);
-    });
-
-    // Bisa diakses Admin dan Moderator (Store & Update)
-    Route::post('categories', [CategoryController::class, 'store']);
-    Route::put('categories/{id}', [CategoryController::class, 'update']);
-
-    // hanya bisa diakses oleh admin (delete/destroy)
-    Route::delete('categories/{id}', [CategoryController::class, 'destroy']);
-
-    // TAMBAHKAN ROUTE INI UNTUK KOMENTAR
-    Route::post('/posts/{postId}/comments', [CommentController::class, 'store']);
-    Route::put('/comments/{id}', [CommentController::class, 'update']);
-    Route::get('/comments/{id}/history', [CommentController::class, 'viewHistory']);
-    
-    Route::post('/posts/{postId}/comments/{commentId}/toggle-accepted', [PostController::class, 'toggleAcceptedAnswer']);
-    Route::post('/comments/{id}/like', [CommentController::class, 'toggleLike']);
-    Route::delete('/comments/{id}', [CommentController::class, 'destroy']);
-    
-    // Jalur endpoint untuk melakukan proses upvote dan downvote
+    // Social & Interactions (Follow, Vote, Like)
+    Route::post('user/follow/{id}', [FollowController::class, 'toggleFollow']);
     Route::post('/vote', [VoteController::class, 'handleVote']);
-
-    // Jalur endpoint untuk melakukan proses like dan unlike (Polymorphic)
     Route::post('/like', [LikeController::class, 'toggleLike']);
 
-    // NOTIFIKASI
+    // Comments Management
+    Route::post('/posts/{postId}/comments', [CommentController::class, 'store']);
+    Route::put('/comments/{id}', [CommentController::class, 'update']);
+    Route::delete('/comments/{id}', [CommentController::class, 'destroy']);
+    Route::get('/comments/{id}/history', [CommentController::class, 'viewHistory']);
+    Route::post('/comments/{id}/like', [CommentController::class, 'toggleLike']);
+
+    // Notifications
     Route::get('/notifications', [NotificationController::class, 'index']);
     Route::post('/notifications/{id}/read', [NotificationController::class, 'markAsRead']);
     Route::post('/notifications/read-all', [NotificationController::class, 'markAllAsRead']);
     Route::delete('/notifications/{id}', [NotificationController::class, 'destroy']);
 
-    // REPORT / FLAG CONTENT
-    Route::post('/reports', [ReportController::class, 'store']); // User melapor
-    
-    // Manajemen Report (Admin & Moderator)
+    // Reports (User melapor)
+    Route::post('/reports', [ReportController::class, 'store']);
+
+    // ==========================================
+    // 3. RUTE KHUSUS: ADMIN & MODERATOR
+    // ==========================================
     Route::middleware('role:admin,moderator')->group(function () {
+        // Categories (Store & Update)
+        Route::post('categories', [CategoryController::class, 'store']);
+        Route::put('categories/{id}', [CategoryController::class, 'update']);
+
+        // Management Reports
         Route::get('/admin/reports', [ReportController::class, 'index']);
         Route::get('/admin/reports/{id}', [ReportController::class, 'show']);
         Route::put('/admin/reports/{id}', [ReportController::class, 'update']);
+
+        // Dummy Route Test
+        Route::post('threads/delete-palsu', function () {
+            return response()->json(['message' => 'Thread berhasil deleted oleh Moderator/Admin.']);
+        });
+    });
+
+    // ==========================================
+    // 4. RUTE KHUSUS: HANYA ADMIN
+    // ==========================================
+    Route::middleware('role:admin')->group(function () {
+        // Tags Management
+        Route::post('tags', [TagController::class, 'store']);
+        Route::put('tags/{id}', [TagController::class, 'update']);
+        Route::delete('tags/{id}', [TagController::class, 'destroy']);
+
+        // Categories (Hanya Admin yang bisa delete)
+        Route::delete('categories/{id}', [CategoryController::class, 'destroy']);
+
+        // PERBAIKAN/TAMBAHAN: Rute Manajemen Peran Pengguna (Assign Role)
+        Route::put('admin/users/{id}/assign-role', [AuthController::class, 'assignRole']);
     });
 });

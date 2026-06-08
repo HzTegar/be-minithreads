@@ -5,7 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Post;
 use App\Models\Comment;
-use App\Models\PostEditHistory; // <-- WAJIB IMPORT INI, BRO!
+use App\Models\PostEditHistory;
 use App\Services\ReputationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
@@ -15,11 +15,14 @@ use Illuminate\Support\Facades\DB;
 class PostController extends Controller
 {
     /**
-     * 1. LIST SEMUA POSTINGAN (DENGAN PAGINATION & SEARCH)
+     * 1. LIST SEMUA POSTINGAN (DENGAN PAGINATION, FILTER & SEARCH)
+     * Mengakomodasi filter berdasarkan category, tags (jamak), user, dan keyword pencarian.
      */
     public function index(Request $request)
     {
-        $query = Post::with(['user', 'category', 'tags', 'comments.user'])->withCount('comments')->latest();
+        $query = Post::with(['user', 'category', 'tags', 'comments.user'])
+            ->withCount(['comments', 'likes'])
+            ->latest();
 
         // Filter berdasarkan kategori (slug)
         if ($request->has('category')) {
@@ -28,17 +31,44 @@ class PostController extends Controller
             });
         }
 
-        // Filter berdasarkan tag (slug)
-        if ($request->has('tag')) {
+        // PERBAIKAN FILTER TAG: Menggunakan 'tags' (jamak) sesuai standar pemanggilan Front-End / Postman
+        if ($request->has('tags')) {
+            $query->whereHas('tags', function ($q) use ($request) {
+                $q->where('slug', $request->tags);
+            });
+        } elseif ($request->has('tag')) { 
+            // Fallback cadangan jika Front-End terlanjur memanggil versi tunggal 'tag'
             $query->whereHas('tags', function ($q) use ($request) {
                 $q->where('slug', $request->tag);
             });
         }
 
-        // Filter berdasarkan user (username)
+        // Filter berdasarkan user (username) yang membuat postingan
         if ($request->has('user')) {
             $query->whereHas('user', function ($q) use ($request) {
                 $q->where('username', $request->user);
+            });
+        }
+
+        // FITUR TAMBAHAN: Integrasi Pencarian Kata Kunci (?keyword=...) langsung di dalam fungsi index
+        if ($request->has('keyword')) {
+            $validator = Validator::make($request->all(), [
+                'keyword' => 'required|string|min:2'
+            ], [
+                'keyword.min' => 'Keyword minimal :min karakter, bro.'
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => $validator->errors()->first('keyword')
+                ], 422);
+            }
+
+            $keyword = $request->keyword;
+            $query->where(function ($q) use ($keyword) {
+                $q->where('title', 'like', "%{$keyword}%")
+                  ->orWhere('body', 'like', "%{$keyword}%");
             });
         }
 
@@ -63,13 +93,12 @@ class PostController extends Controller
             'category', 
             'tags', 
             'comments' => function($query) {
-                $query->whereNull('parent_id') // Ambil komentar utama saja
+                $query->whereNull('parent_id')
                       ->with(['user', 'replies.user'])
-                      ->withCount('likes'); // Eager load user & balasan
+                      ->withCount('likes');
             }
         ])->withCount('likes');
 
-        // Jika yang akses adalah Admin atau Moderator, tampilkan riwayat edit
         if ($user && ($user->isAdmin() || $user->isModerator())) {
             $query->with(['edit_histories' => function($q) {
                 $q->with('user')->latest();
@@ -85,7 +114,6 @@ class PostController extends Controller
             ], 404);
         }
 
-        // Increment view count secara otomatis setiap kali detail dibuka
         $post->increment('view_count');
 
         return response()->json([
@@ -124,7 +152,6 @@ class PostController extends Controller
             ], 401);
         }
 
-        // CEK BATASAN POIN: Minimal 20 poin untuk posting (Kecuali Admin/Moderator)
         if (!$user->isAdmin() && !$user->isModerator() && $user->reputation_points < ReputationService::MIN_POINTS_TO_POST) {
             return response()->json([
                 'success' => false,
@@ -142,7 +169,6 @@ class PostController extends Controller
                 'edit_count'  => 0,
             ]);
 
-            // Menyinkronkan hubungan tags ke tabel pivot jika dikirimkan
             if ($request->has('tags')) {
                 $tagIds = [];
                 foreach ($request->tags as $tagName) {
@@ -158,13 +184,13 @@ class PostController extends Controller
             return response()->json([
                 'success' => true,
                 'message' => 'Pertanyaan kamu berhasil diterbitkan, bro!',
-                'data'    => $post->load('tags') // Memuat tag yang baru ditempel agar muncul di response
+                'data'    => $post->load('tags')
             ], 201);
         });
     }
 
     /**
-     * 4. EDIT POST (UPDATE) - SUDAH FIX 100% TERINTEGRASI USER_ID HISTORY
+     * 4. EDIT POST (UPDATE)
      */
     public function update(Request $request, $id)
     {
@@ -185,7 +211,6 @@ class PostController extends Controller
             ], 403);
         }
 
-        // Cek batasan edit menggunakan kolom edit_count bawaan database (maksimal 3 kali)
         if ($post->edit_count >= 3) {
             return response()->json([
                 'success' => false,
@@ -209,7 +234,6 @@ class PostController extends Controller
         }
 
         return DB::transaction(function () use ($request, $post, $user) {
-            // PERBAIKAN: Menyertakan 'user_id' agar log mencatat penanggung jawab perubahan
             $post->edit_histories()->create([
                 'user_id'     => $user->id, 
                 'old_title'   => $post->title,
@@ -263,7 +287,6 @@ class PostController extends Controller
 
         $user = auth('api')->user();
 
-        // Otoritas: Cek apakah user adalah pemilik post, Admin, atau Moderator
         if ($user->id !== $post->user_id && !$user->isAdmin() && !$user->isModerator()) {
             return response()->json([
                 'success' => false,
@@ -271,16 +294,15 @@ class PostController extends Controller
             ], 403);
         }
 
-        // Logic: Jika User Biasa (Pemilik) yang hapus -> Soft Delete. Jika Admin/Mod yang hapus -> Force Delete (Hard Delete)
         if ($user->isAdmin() || $user->isModerator()) {
-            $post->forceDelete(); // Menghapus permanen dari database
+            $post->forceDelete();
             return response()->json([
                 'success' => true,
                 'message' => 'Postingan telah dihapus secara PERMANEN oleh Staf, bro!'
             ], 200);
         }
 
-        $post->delete(); // Soft delete (hanya isi kolom deleted_at)
+        $post->delete();
 
         return response()->json([
             'success' => true,
@@ -290,7 +312,6 @@ class PostController extends Controller
 
     /**
      * 6. MEMILIH JAWABAN TERBAIK (TOGGLE ACCEPTED ANSWER)
-     * POST /api/posts/{postId}/comments/{commentId}/toggle-accepted
      */
     public function toggleAcceptedAnswer(Request $request, $postId, $commentId)
     {
@@ -323,7 +344,6 @@ class PostController extends Controller
             $oldAcceptedAnswerId = $post->accepted_answer_id;
             $service = app(ReputationService::class);
 
-            // Kondisi Toggle Off: Membatal status jawaban terbaik yang sudah ada
             if ($oldAcceptedAnswerId === $comment->id) {
                 $post->update(['accepted_answer_id' => null, 'is_answered' => false]);
                 $comment->update(['is_accepted' => false]);
@@ -345,7 +365,6 @@ class PostController extends Controller
                 ]);
             }
 
-            // Kondisi Rebutan/Penggantian: Cabut poin dari jawaban terbaik lama (jika ada)
             if ($oldAcceptedAnswerId) {
                 $oldComment = Comment::with('user')->find($oldAcceptedAnswerId);
                 if ($oldComment) {
@@ -362,11 +381,9 @@ class PostController extends Controller
                 }
             }
 
-            // Menetapkan jawaban baru sebagai yang terbaik
             $post->update(['accepted_answer_id' => $comment->id, 'is_answered' => true]);
             $comment->update(['is_accepted' => true]);
 
-            // Kirim Notifikasi ke pemilik jawaban
             if ($comment->user && $comment->user_id !== $user->id) {
                 $comment->user->notify(new \App\Notifications\AnswerAcceptedNotification($post, $comment, $user));
             }
@@ -391,7 +408,6 @@ class PostController extends Controller
 
     /**
      * 7. MELIHAT RIWAYAT EDIT POST (Khusus Admin & Moderator)
-     * GET /api/posts/{id}/history
      */
     public function viewHistory($id)
     {
@@ -417,7 +433,6 @@ class PostController extends Controller
 
     /**
      * 10. TOGGLE ARCHIVE (CLOSE/REOPEN)
-     * POST /api/posts/{id}/toggle-archive
      */
     public function toggleArchive($id)
     {
@@ -431,7 +446,6 @@ class PostController extends Controller
             return response()->json(['success' => false, 'message' => 'Hanya pemilik postingan yang bisa mengarsipkan ini.'], 403);
         }
 
-        // Jika mau di-close (archive) - Tambahkan syarat harus sudah dijawab (is_answered)
         if ($post->status !== 'closed' && !$post->is_answered) {
             return response()->json([
                 'success' => false,
@@ -439,7 +453,6 @@ class PostController extends Controller
             ], 400);
         }
 
-        // Jika sudah di-close, mau di-reopen
         if ($post->status === 'closed') {
             if ($post->is_closed_permanently) {
                 return response()->json([
@@ -460,7 +473,6 @@ class PostController extends Controller
             ], 200);
         }
 
-        // Jika mau di-close (archive)
         $post->update([
             'status' => 'closed',
             'closed_at' => now()

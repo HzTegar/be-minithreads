@@ -14,6 +14,14 @@ class NotificationController extends Controller
     {
         $user = auth('api')->user();
         
+        // PERBAIKAN NYAMAN: Validasi token/sesi pengguna sebelum memproses query
+        if (!$user) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Sesi login tidak valid atau kadaluarsa.'
+            ], 401);
+        }
+        
         // Default ambil semua, tapi bisa difilter hanya yang 'unread'
         $query = $user->notifications();
 
@@ -37,6 +45,14 @@ class NotificationController extends Controller
     public function markAsRead($id)
     {
         $user = auth('api')->user();
+
+        if (!$user) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Sesi login tidak valid atau kadaluarsa.'
+            ], 401);
+        }
+
         $notification = $user->notifications()->where('id', $id)->first();
 
         if (!$notification) {
@@ -60,7 +76,16 @@ class NotificationController extends Controller
     public function markAllAsRead()
     {
         $user = auth('api')->user();
-        $user->unreadNotifications->markAsRead();
+
+        if (!$user) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Sesi login tidak valid atau kadaluarsa.'
+            ], 401);
+        }
+
+        // PERBAIKAN RINGAN: Gunakan unreadNotifications() berupa method query agar lebih efisien untuk data banyak
+        $user->unreadNotifications()->update(['read_at' => now()]);
 
         return response()->json([
             'success' => true,
@@ -74,6 +99,14 @@ class NotificationController extends Controller
     public function destroy($id)
     {
         $user = auth('api')->user();
+
+        if (!$user) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Sesi login tidak valid atau kadaluarsa.'
+            ], 401);
+        }
+
         $notification = $user->notifications()->where('id', $id)->first();
 
         if (!$notification) {

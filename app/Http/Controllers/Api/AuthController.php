@@ -127,6 +127,57 @@ class AuthController extends Controller
         return response()->json(['success' => true, 'message' => 'Berhasil logout, token hangus!']);
     }
 
+    /**
+     * TAMBAHAN MANAJEMEN PERAN: MENGUBAH LEVEL USER (Hanya Admin)
+     * PUT /api/admin/users/{id}/assign-role
+     */
+    public function assignRole(Request $request, $id)
+    {
+        // 1. Pastikan pengguna yang dituju ada di database
+        $targetUser = User::find($id);
+        if (!$targetUser) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Pengguna tidak ditemukan.'
+            ], 404);
+        }
+
+        // 2. Validasi input level (role) yang dikirimkan
+        $validator = Validator::make($request->all(), [
+            'level' => 'required|in:user,moderator,admin',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        // 3. Mencegah Admin menurunkan level akunnya sendiri secara tidak sengaja
+        if ($targetUser->id === auth('api')->id() && $request->level !== 'admin') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Anda tidak bisa menurunkan jabatan Admin Anda sendiri, bro!'
+            ], 400);
+        }
+
+        // 4. Perbarui level pengguna di database
+        $targetUser->update([
+            'level' => $request->level 
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => "Jabatan pengguna {$targetUser->username} berhasil diubah menjadi {$request->level}.",
+            'data' => [
+                'id' => $targetUser->id,
+                'username' => $targetUser->username,
+                'level' => $targetUser->level
+            ]
+        ], 200);
+    }
+
     protected function respondWithToken($token)
     {
         return response()->json([
