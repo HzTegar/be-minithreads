@@ -109,7 +109,7 @@ class User extends Authenticatable implements JWTSubject
      * @param string|array $roleName
      * @return bool
      */
-    public function hasRole($roleName): bool
+    public function hasRole($roleName): bool        
     {
         if (is_array($roleName)) {
             return in_array($this->level, $roleName);
