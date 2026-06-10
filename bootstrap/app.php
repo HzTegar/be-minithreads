@@ -11,6 +11,9 @@ return Application::configure(basePath: dirname(__DIR__))
         commands: __DIR__.'/../routes/console.php',
         health: '/up',
     )
+
+    
+
     ->withMiddleware(function (Middleware $middleware) {
         $middleware->alias([
             'role' => \App\Http\Middleware\CheckRole::class,
@@ -20,6 +23,18 @@ return Application::configure(basePath: dirname(__DIR__))
              'rate.limit' => \App\Http\Middleware\RateLimitMiddleware::class,
         ]);
     })
+    ->withMiddleware(function (Middleware $middleware) {
+
+    $middleware->append(
+        \Illuminate\Http\Middleware\HandleCors::class
+    );
+
+    $middleware->alias([
+        'role' => \App\Http\Middleware\CheckRole::class,
+        'cache.response' => \App\Http\Middleware\CacheResponse::class,
+        'rate.limit' => \App\Http\Middleware\RateLimitMiddleware::class,
+    ]);
+})
     ->withExceptions(function (Exceptions $exceptions): void {
         //
     })->create();
