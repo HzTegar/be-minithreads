@@ -46,7 +46,7 @@ class User extends Authenticatable implements JWTSubject
     public function getRankLevelAttribute(): string
     {
         $points = $this->reputation_points ?? 0;
-        $currentRank = 'bronze';
+        $currentRank = 'iron';
 
         foreach (self::RANKS as $rank) {
             if ($points >= $rank['min_points']) {
