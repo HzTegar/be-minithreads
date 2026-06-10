@@ -29,10 +29,13 @@ class User extends Authenticatable implements JWTSubject
      * DEFINISI TINGKATAN REPUTASI (GELAR)
      */
     const RANKS = [
-        ['name' => 'Newbie',   'min_points' => 0],
-        ['name' => 'Regular',  'min_points' => 50],
-        ['name' => 'Pro',      'min_points' => 200],
-        ['name' => 'Master',   'min_points' => 1000],
+        ['name' => 'bronze',   'min_points' => 0],
+        ['name' => 'silver',  'min_points' => 50],
+        ['name' => 'gold',      'min_points' => 100],
+        ['name' => 'platinum',   'min_points' => 500],
+        ['name' => 'diamond',   'min_points' => 1000],
+        ['name' => 'master',   'min_points' => 1200],
+        ['name' => 'grandmaster', 'min_points' => 1500],
     ];
 
     protected $appends = ['rank_level'];
