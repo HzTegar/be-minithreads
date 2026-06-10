@@ -11,10 +11,10 @@ class ReputationLevelTest extends TestCase
     use RefreshDatabase;
 
     /** @test */
-    public function user_has_default_rank_newbie()
+    public function user_has_default_rank_bronze()
     {
         $user = User::factory()->create(['reputation_points' => 0]);
-        $this->assertEquals('Newbie', $user->rank_level);
+        $this->assertEquals('Bronze', $user->rank_level);
     }
 
     /** @test */
@@ -22,30 +22,45 @@ class ReputationLevelTest extends TestCase
     {
         $user = User::factory()->create(['reputation_points' => 0]);
 
-        // 50 Poin -> Regular
-        $user->reputation_points = 55;
+        // 20 Poin -> Silver
+        $user->reputation_points = 25;
         $user->save();
-        $this->assertEquals('Regular', $user->rank_level);
+        $this->assertEquals('Silver', $user->rank_level);
 
-        // 200 Poin -> Pro
-        $user->reputation_points = 210;
+        // 100 Poin -> Gold
+        $user->reputation_points = 110;
         $user->save();
-        $this->assertEquals('Pro', $user->rank_level);
+        $this->assertEquals('Gold', $user->rank_level);
 
-        // 1000 Poin -> Master
+        // 500 Poin -> Platinum
+        $user->reputation_points = 510;
+        $user->save();
+        $this->assertEquals('Platinum', $user->rank_level);
+
+        // 1000 Poin -> Diamond
         $user->reputation_points = 1050;
         $user->save();
+        $this->assertEquals('Diamond', $user->rank_level);
+
+        // 1500 Poin -> Master
+        $user->reputation_points = 1550;
+        $user->save();
         $this->assertEquals('Master', $user->rank_level);
+
+        // 2500 Poin -> Grand Master
+        $user->reputation_points = 2600;
+        $user->save();
+        $this->assertEquals('Grand Master', $user->rank_level);
     }
 
     /** @test */
     public function rank_level_is_included_in_json_response()
     {
-        $user = User::factory()->create(['reputation_points' => 60]);
+        $user = User::factory()->create(['reputation_points' => 120]);
         
         $response = $this->actingAs($user, 'api')->getJson('/api/auth/me');
 
         $response->assertStatus(200)
-            ->assertJsonPath('user.rank_level', 'Regular');
+            ->assertJsonPath('user.rank_level', 'Gold');
     }
 }
