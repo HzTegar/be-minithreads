@@ -279,4 +279,77 @@ class CommentController extends Controller
             'data' => $histories
         ], 200);
     }
+
+    /**
+     * TOGGLE LIKE PADA KOMENTAR
+     * POST /api/comments/{id}/like
+     */
+    public function toggleLike(Request $request, $id)
+    {
+        $comment = Comment::find($id);
+
+        if (!$comment) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Komentar tidak ditemukan, bro.'
+            ], 404);
+        }
+
+        $user = auth('api')->user();
+        if (!$user) {
+            return response()->json([
+                'success' => false,
+                'message' => 'User tidak terautentikasi, bro.'
+            ], 401);
+        }
+
+        return DB::transaction(function () use ($comment, $user) {
+            $existingLike = \App\Models\Like::where('user_id', $user->id)
+                                ->where('target_id', $comment->id)
+                                ->where('target_type', 'comment')
+                                ->first();
+
+            if ($existingLike) {
+                $existingLike->delete();
+                $likesCount = \App\Models\Like::where('target_id', $comment->id)
+                                ->where('target_type', 'comment')
+                                ->count();
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Komentar berhasil batal di-like, bro!',
+                    'is_liked' => false,
+                    'likes_count' => $likesCount
+                ], 200);
+            }
+
+            \App\Models\Like::create([
+                'user_id'     => $user->id,
+                'target_id'   => $comment->id,
+                'target_type' => 'comment',
+            ]);
+
+            // Kirim notifikasi jika ini bukan komentar miliknya sendiri
+            try {
+                if ($comment->user_id !== $user->id && !empty($comment->user)) {
+                    if (class_exists('\App\Notifications\CommentLikedNotification')) {
+                        $comment->user->notify(new \App\Notifications\CommentLikedNotification($comment, $user));
+                    }
+                }
+            } catch (\Exception $e) {
+                \Log::warning("Gagal mengirimkan notifikasi like komentar: " . $e->getMessage());
+            }
+
+            $likesCount = \App\Models\Like::where('target_id', $comment->id)
+                            ->where('target_type', 'comment')
+                            ->count();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Komentar berhasil di-like, bro!',
+                'is_liked' => true,
+                'likes_count' => $likesCount
+            ], 201);
+        });
+    }
 }

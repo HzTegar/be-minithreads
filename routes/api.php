@@ -25,12 +25,14 @@ use Illuminate\Support\Facades\Route;
 // 1. RUTE PUBLIK (Tanpa Login) 
 // ==========================================
 
-Route::group(['prefix' => 'auth'], function () {
+// Proteksi ketat untuk Login & Register (Maksimal 10 request per 1 menit untuk mencegah brute-force)
+Route::group(['prefix' => 'auth', 'middleware' => 'rate.limit:10,1'], function () {
     Route::post('register', [AuthController::class, 'register']);
     Route::post('login', [AuthController::class, 'login']);
 });
 
-Route::group(['prefix' => 'search'], function () {
+// Proteksi global untuk fitur pencarian (Maksimal 30 request per 1 menit)
+Route::group(['prefix' => 'search', 'middleware' => 'rate.limit:30,1'], function () {
     Route::get('global', [SearchController::class, 'searchGlobal']);
     Route::get('posts', [SearchController::class, 'searchPosts']);
     Route::get('users', [SearchController::class, 'searchUsers']);
@@ -38,22 +40,26 @@ Route::group(['prefix' => 'search'], function () {
     Route::get('categories', [SearchController::class, 'searchCategories']);
 });
 
-// Konten Publik (Read-Only)
-Route::get('posts', [PostController::class, 'index']);
-Route::get('posts/{id}', [PostController::class, 'show']);
+// Konten Publik Read-Only dengan kombinasi Cache dan Rate Limiter (Maksimal 60 request per 1 menit)
+Route::group(['middleware' => 'rate.limit:60,1'], function () {
+    // Rute utama posts tetap dipertahankan dan sekarang mendukung parameter filter kaku maupun pencarian kata kunci teks bebas (?keyword=)
+    Route::get('posts', [PostController::class, 'index'])->middleware('cache.response:60');
+    Route::get('posts/{id}', [PostController::class, 'show'])->middleware('cache.response:300');
 
-Route::get('tags', [TagController::class, 'index']);
-Route::get('tags/{id}', [TagController::class, 'show']);
+    Route::get('tags', [TagController::class, 'index'])->middleware('cache.response:60');
+    Route::get('tags/{id}', [TagController::class, 'show'])->middleware('cache.response:300');
 
-Route::get('categories', [CategoryController::class, 'index']);
-Route::get('categories/{id}', [CategoryController::class, 'show']);
+    Route::get('categories', [CategoryController::class, 'index'])->middleware('cache.response:60');
+    Route::get('categories/{id}', [CategoryController::class, 'show'])->middleware('cache.response:300');
+});
 
 
 // ==========================================
 // 2. RUTE PROTECTED (Wajib Login JWT)
 // ==========================================
 
-Route::middleware('auth:api')->group(function () {
+// Menerapkan rate limit standar untuk pengguna yang sudah login (Maksimal 100 request per 1 menit)
+Route::middleware(['auth:api', 'rate.limit:100,1'])->group(function () {
     
     // Auth & Profile
     Route::group(['prefix' => 'auth'], function () {
@@ -68,25 +74,25 @@ Route::middleware('auth:api')->group(function () {
     Route::get('/bookmarks', [BookmarkController::class, 'index']);
     Route::post('/posts/{postId}/bookmark', [BookmarkController::class, 'toggle']);
 
-    // Posts Management (User Biasa)
-    Route::post('posts', [PostController::class, 'store']);
+    // Posts Management (User Biasa) - Dibatasi lebih ketat khusus untuk membuat/mengubah postingan (Maksimal 10 post per 1 menit)
+    Route::post('posts', [PostController::class, 'store'])->middleware('rate.limit:10,1');
     Route::put('posts/{id}', [PostController::class, 'update']);
     Route::delete('posts/{id}', [PostController::class, 'destroy']);
     Route::get('/posts/{id}/history', [PostController::class, 'viewHistory']);
     Route::post('/posts/{id}/toggle-archive', [PostController::class, 'toggleArchive']);
     Route::post('/posts/{postId}/comments/{commentId}/toggle-accepted', [PostController::class, 'toggleAcceptedAnswer']);
 
-    // Social & Interactions (Follow, Vote, Like)
-    Route::post('user/follow/{id}', [FollowController::class, 'toggleFollow']);
-    Route::post('/vote', [VoteController::class, 'handleVote']);
-    Route::post('/like', [LikeController::class, 'toggleLike']);
+    // Social & Interactions (Follow, Vote, Like) - Batasi spam klik (Maksimal 20 interaction per 1 menit)
+    Route::post('user/follow/{id}', [FollowController::class, 'toggleFollow'])->middleware('rate.limit:20,1');
+    Route::post('/vote', [VoteController::class, 'handleVote'])->middleware('rate.limit:20,1');
+    Route::post('/like', [LikeController::class, 'handleLike'])->middleware('rate.limit:20,1');
 
-    // Comments Management
-    Route::post('/posts/{postId}/comments', [CommentController::class, 'store']);
+    // Comments Management - Batasi pembuatan komentar (Maksimal 15 komentar per 1 menit)
+    Route::post('/posts/{postId}/comments', [CommentController::class, 'store'])->middleware('rate.limit:15,1');
     Route::put('/comments/{id}', [CommentController::class, 'update']);
     Route::delete('/comments/{id}', [CommentController::class, 'destroy']);
     Route::get('/comments/{id}/history', [CommentController::class, 'viewHistory']);
-    Route::post('/comments/{id}/like', [CommentController::class, 'toggleLike']);
+    Route::post('/comments/{id}/like', [CommentController::class, 'toggleLike'])->middleware('rate.limit:20,1');
 
     // Notifications
     Route::get('/notifications', [NotificationController::class, 'index']);
@@ -116,9 +122,7 @@ Route::middleware('auth:api')->group(function () {
         });
     });
 
-    // ==========================================
-    // 4. RUTE KHUSUS: HANYA ADMIN
-    // ==========================================
+    // route hanya khusus admin untuk manajemen tag, kategori, dan assign role pengguna
     Route::middleware('role:admin')->group(function () {
         // Tags Management
         Route::post('tags', [TagController::class, 'store']);
@@ -128,7 +132,7 @@ Route::middleware('auth:api')->group(function () {
         // Categories (Hanya Admin yang bisa delete)
         Route::delete('categories/{id}', [CategoryController::class, 'destroy']);
 
-        // PERBAIKAN/TAMBAHAN: Rute Manajemen Peran Pengguna (Assign Role)
+        // Rute Manajemen Peran Pengguna (Assign Role)
         Route::put('admin/users/{id}/assign-role', [AuthController::class, 'assignRole']);
     });
 });

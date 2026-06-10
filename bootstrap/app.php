@@ -12,12 +12,14 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware) {
-    $middleware->alias([
-        'role' => \App\Http\Middleware\CheckRole::class,
-    ]);
-})
+        $middleware->alias([
+            'role' => \App\Http\Middleware\CheckRole::class,
+            //mendaftarkan middleware cache.response kustom
+            'cache.response' => \App\Http\Middleware\CacheResponse::class,
+            //mendaftarkan alias rute untuk rate limiter kustom 
+             'rate.limit' => \App\Http\Middleware\RateLimitMiddleware::class,
+        ]);
+    })
     ->withExceptions(function (Exceptions $exceptions): void {
         //
     })->create();
-
-    

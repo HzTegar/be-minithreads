@@ -34,10 +34,8 @@ class VoteController extends Controller
         // 2. Tentukan Model Target
         if ($request->target_type === 'post') {
             $model = Post::with('user')->find($request->target_id);
-            $modelName = Post::class;
         } else {
             $model = Comment::with('user')->find($request->target_id);
-            $modelName = Comment::class;
         }
 
         if (!$model) {
@@ -47,6 +45,8 @@ class VoteController extends Controller
             ], 404);
         }
 
+        $modelClass = $model->getMorphClass();
+
         // PERLINDUNGAN: Mencegah user melakukan vote pada konten miliknya sendiri
         if ($model->user_id === $user->id) {
             return response()->json([
@@ -55,14 +55,14 @@ class VoteController extends Controller
             ], 403);
         }
 
-        return DB::transaction(function () use ($request, $user, $model, $modelName) {
+        return DB::transaction(function () use ($request, $user, $model, $modelClass) {
             $service = app(ReputationService::class);
             $targetLabel = ($request->target_type === 'post') ? 'postingan' : 'komentar';
 
             // 3. Cek Riwayat Vote
             $existingVote = Vote::where('user_id', $user->id)
                                 ->where('target_id', $model->id)
-                                ->where('target_type', $modelName)
+                                ->where('target_type', $modelClass)
                                 ->first();
 
             if ($existingVote) {
@@ -93,7 +93,7 @@ class VoteController extends Controller
             Vote::create([
                 'user_id'     => $user->id,
                 'target_id'   => $model->id,
-                'target_type' => $modelName,
+                'target_type' => $modelClass,
                 'vote_type'   => $request->vote_type
             ]);
 

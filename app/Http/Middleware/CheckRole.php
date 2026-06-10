@@ -19,7 +19,7 @@ class CheckRole
                 'message' => 'Anda harus login terlebih dahulu.'
             ], 401);
         }
-
+    
         if (!$user->hasRole($roles)) {
             return response()->json([
                 'success' => false,
