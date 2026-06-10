@@ -52,13 +52,14 @@ describe('MiniThreads Master API & Point System Test', () => {
       newbieToken = res.body.access_token;
       newbieId = res.body.user.id;
 
-      // Verify initial points are 0
+      // Verify initial points are 0 and rank is Bronze
       cy.request({
         method: 'GET',
         url: `${baseUrl}/auth/me`,
         headers: { Authorization: `Bearer ${newbieToken}` }
       }).then((meRes) => {
         expect(meRes.body.user.reputation_points).to.eq(0);
+        expect(meRes.body.user.rank_level).to.eq('Bronze');
       });
 
       // Try to Post (Must Fail - 403 Forbidden)
@@ -158,13 +159,14 @@ describe('MiniThreads Master API & Point System Test', () => {
         });
       });
 
-      // Now verify points are >= 20
+      // Now verify points are >= 20 and rank is Silver
       cy.request({
         method: 'GET',
         url: `${baseUrl}/auth/me`,
         headers: { Authorization: `Bearer ${newbieToken}` }
       }).then((meRes) => {
         expect(meRes.body.user.reputation_points).to.be.at.least(20);
+        expect(meRes.body.user.rank_level).to.eq('Silver');
       });
     });
   });

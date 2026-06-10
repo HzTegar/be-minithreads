@@ -29,13 +29,13 @@ class User extends Authenticatable implements JWTSubject
      * DEFINISI TINGKATAN REPUTASI (GELAR)
      */
     const RANKS = [
-        ['name' => 'bronze',   'min_points' => 0],
-        ['name' => 'silver',  'min_points' => 50],
-        ['name' => 'gold',      'min_points' => 100],
-        ['name' => 'platinum',   'min_points' => 500],
-        ['name' => 'diamond',   'min_points' => 1000],
-        ['name' => 'master',   'min_points' => 1200],
-        ['name' => 'grandmaster', 'min_points' => 1500],
+        ['name' => 'Bronze',       'min_points' => 0],
+        ['name' => 'Silver',       'min_points' => 20],
+        ['name' => 'Gold',         'min_points' => 100],
+        ['name' => 'Platinum',     'min_points' => 500],
+        ['name' => 'Diamond',      'min_points' => 1000],
+        ['name' => 'Master',       'min_points' => 1500],
+        ['name' => 'Grand Master', 'min_points' => 2500],
     ];
 
     protected $appends = ['rank_level'];
@@ -46,7 +46,7 @@ class User extends Authenticatable implements JWTSubject
     public function getRankLevelAttribute(): string
     {
         $points = $this->reputation_points ?? 0;
-        $currentRank = 'iron';
+        $currentRank = 'Bronze';
 
         foreach (self::RANKS as $rank) {
             if ($points >= $rank['min_points']) {
@@ -58,7 +58,7 @@ class User extends Authenticatable implements JWTSubject
 
         return $currentRank;
     }
-
+        
     protected $hidden = [
         'password_hash',
         'remember_token',
