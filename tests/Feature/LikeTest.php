@@ -68,7 +68,7 @@ class LikeTest extends TestCase
         $this->assertDatabaseHas('likes', [
             'user_id' => $this->user->id,
             'target_id' => $this->post->id,
-            'target_type' => Post::class
+            'target_type' => 'post'
         ]);
     }
 
@@ -98,7 +98,7 @@ class LikeTest extends TestCase
         $this->assertDatabaseHas('likes', [
             'user_id' => $this->user->id,
             'target_id' => $comment->id,
-            'target_type' => \App\Models\Comment::class
+            'target_type' => 'comment'
         ]);
     }
 
@@ -131,7 +131,7 @@ class LikeTest extends TestCase
         $this->assertDatabaseMissing('likes', [
             'user_id' => $this->user->id,
             'target_id' => $comment->id,
-            'target_type' => \App\Models\Comment::class
+            'target_type' => 'comment'
         ]);
     }
 
@@ -158,7 +158,7 @@ class LikeTest extends TestCase
         $this->assertDatabaseMissing('likes', [
             'user_id' => $this->user->id,
             'target_id' => $this->post->id,
-            'target_type' => Post::class
+            'target_type' => 'post'
         ]);
     }
 

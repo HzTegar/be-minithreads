@@ -48,17 +48,12 @@ class ReportController extends Controller
         // Cek dan petakan jenis entitas yang dilaporkan
         if ($request->target_type === 'post') {
             $target = Post::find($request->target_id);
-            $targetClass = Post::class;
             $targetOwnerId = $target ? $target->user_id : null;
-
         } elseif ($request->target_type === 'comment') {
             $target = Comment::find($request->target_id);
-            $targetClass = Comment::class;
             $targetOwnerId = $target ? $target->user_id : null;
-
         } else {
             $target = User::find($request->target_id);
-            $targetClass = User::class;
             $targetOwnerId = $target ? $target->id : null;
         }
 
@@ -69,6 +64,8 @@ class ReportController extends Controller
                 'message' => 'Target yang ingin dilaporkan tidak ditemukan.'
             ], 404);
         }
+
+        $targetClass = $target->getMorphClass();
 
         // Mencegah pelaporan konten milik sendiri atau melaporkan diri sendiri
         if ($targetOwnerId === $user->id) {

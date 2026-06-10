@@ -10,16 +10,16 @@ use App\Services\ReputationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;
+use Log;
 
 class LikeController extends Controller
 {
     /**
      * TOGGLE LIKE (LIKE/UNLIKE)
-     * Digunakan untuk menyukai postingan atau komentar (Polymorphic)
      */
-    public function toggleLike(Request $request)
+    public function handleLike(Request $request)
     {
-        // 1. Validasi Input
+        // 1. Validasi Input Parameter
         $validator = Validator::make($request->all(), [
             'target_id'   => 'required',
             'target_type' => 'required|in:post,comment',
@@ -33,14 +33,18 @@ class LikeController extends Controller
         }
 
         $user = auth('api')->user();
+        if (!$user) {
+            return response()->json([
+                'success' => false,
+                'message' => 'User tidak terautentikasi, bro.'
+            ], 401);
+        }
 
-        // 2. Tentukan Model Target
+        // 2. Tentukan Model Target Pengujian
         if ($request->target_type === 'post') {
             $model = Post::find($request->target_id);
-            $modelClass = Post::class;
         } else {
             $model = Comment::find($request->target_id);
-            $modelClass = Comment::class;
         }
 
         if (!$model) {
@@ -50,69 +54,94 @@ class LikeController extends Controller
             ], 404);
         }
 
+        // Ambil representasi string nama model yang valid untuk kolom database
+        $modelClass = $model->getMorphClass();
+
         return DB::transaction(function () use ($request, $user, $model, $modelClass) {
             $service = app(ReputationService::class);
             
-            // 3. Cek apakah sudah pernah di-like oleh user ini
+            // 3. Cek Eksistensi Data Like Sebelumnya
             $existingLike = Like::where('user_id', $user->id)
                                 ->where('target_id', $model->id)
                                 ->where('target_type', $modelClass)
                                 ->first();
 
             if ($existingLike) {
-                // UNLIKE: Hapus data like
+                // RUN UNLIKE ACTION
                 $existingLike->delete();
 
-                // DEDUCT POINTS: Jika postingan yang batal di-like, kurangi poin author-nya (Atau user yang ngelike?)
-                // User bilang: "user harus melakukan aktivitas seperti ngelike ... ngevote ... mendapatkan point 5"
-                // Berarti yang dapet poin itu yang MELAKUKAN aktivitas, bukan author-nya.
+                // Pengurangan poin untuk aktivitas pembatalan menyukai konten
                 if ($request->target_type === 'post') {
+                    $title = $model->title ?? 'Postingan Tanpa Judul';
+                    
+                    // Fallback ganda: Mengirimkan ID murni untuk mencocokkan arsitektur internal service
                     $service->deductPoints(
                         $user,
-                        ReputationService::POINTS_LIKE,
+                        ReputationService::POINTS_LIKE ?? 10,
                         'post_unliked',
-                        $model->id,
-                        "Batal menyukai postingan: {$model->title}"
+                        $model->id, 
+                        "Batal menyukai postingan: {$title}"
                     );
                 }
+
+                $likesCount = Like::where('target_id', $model->id)
+                                ->where('target_type', $modelClass)
+                                ->count();
 
                 return response()->json([
                     'success' => true,
                     'message' => ($request->target_type === 'post' ? 'Post' : 'Komentar') . ' berhasil batal di-like, bro!',
                     'is_liked' => false,
-                    'likes_count' => $model->likes()->count()
+                    'likes_count' => $likesCount
                 ], 200);
             }
 
-            // LIKE: Buat data like baru
+            // RUN LIKE ACTION
             Like::create([
                 'user_id'     => $user->id,
                 'target_id'   => $model->id,
                 'target_type' => $modelClass,
             ]);
 
-            // AWARD POINTS: Jika postingan yang di-like, kasih poin ke user yang ngelike
+            // Penambahan poin reputasi pengguna
             if ($request->target_type === 'post') {
+                $title = $model->title ?? 'Postingan Tanpa Judul';
+                
                 $service->awardPoints(
                     $user,
-                    ReputationService::POINTS_LIKE,
+                    ReputationService::POINTS_LIKE ?? 10,
                     'post_liked',
                     $model->id,
-                    "Menyukai postingan: {$model->title}"
+                    "Menyukai postingan: {$title}"
                 );
             }
 
-            // Kirim Notifikasi jika yang di-like adalah POSTINGAN dan bukan milik sendiri
-            if ($request->target_type === 'post' && $model->user_id !== $user->id) {
-                $model->user->notify(new \App\Notifications\PostLikedNotification($model, $user));
+            // PERBAIKAN UTAMA: Amankan proses pengiriman notifikasi dengan blok Try-Catch
+            try {
+                if (isset($model->user_id) && $model->user_id !== $user->id) {
+                    if ($request->target_type === 'post' && !empty($model->user)) {
+                        $model->user->notify(new \App\Notifications\PostLikedNotification($model, $user));
+                    } elseif ($request->target_type === 'comment' && !empty($model->user)) {
+                        if (class_exists('\App\Notifications\CommentLikedNotification')) {
+                            $model->user->notify(new \App\Notifications\CommentLikedNotification($model, $user));
+                        }
+                    }
+                }
+            } catch (\Exception $e) {
+                // Catat detail kegagalan sistem pada file log utama aplikasi Anda
+                Log::warning("Gagal mengirimkan notifikasi interaksi aktivitas: " . $e->getMessage());
             }
+
+            $likesCount = Like::where('target_id', $model->id)
+                            ->where('target_type', $modelClass)
+                            ->count();
 
             return response()->json([
                 'success' => true,
                 'message' => ($request->target_type === 'post' ? 'Post' : 'Komentar') . ' berhasil di-like, bro!',
                 'is_liked' => true,
-                'likes_count' => $model->likes()->count()
+                'likes_count' => $likesCount
             ], 201);
-        });
+        }); 
     }
 }

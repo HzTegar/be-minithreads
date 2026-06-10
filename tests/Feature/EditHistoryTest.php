@@ -24,7 +24,10 @@ class EditHistoryTest extends TestCase
     {
         parent::setUp();
 
-        $this->user = User::factory()->create(['level' => 'user']);
+        $this->user = User::factory()->create([
+            'level' => 'user',
+            'reputation_points' => 100
+        ]);
         $this->token = JWTAuth::fromUser($this->user);
 
         $this->admin = User::factory()->create(['level' => 'admin']);
