@@ -7,6 +7,7 @@ use App\Models\User;
 use App\Models\Post;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\Rule;
 
 class ProfileController extends Controller
 {
@@ -64,38 +65,53 @@ class ProfileController extends Controller
      * PROTECTED: Update profil sendiri
      * POST /api/profile/update
      */
-    public function updateProfile(Request $request)
-    {
-        $user = auth('api')->user();
+   public function updateProfile(Request $request)
+{
+    $user = auth('api')->user();
 
-        $validator = Validator::make($request->all(), [
-            'bio'    => 'nullable|string|max:500',
-            'avatar' => 'nullable|image|mimes:jpeg,png,jpg|max:2048',
-        ]);
+    $validator = Validator::make($request->all(), [
+        'bio'      => 'nullable|string|max:500',
+        'avatar'   => 'nullable|image|mimes:jpeg,png,jpg|max:2048',
+        'username' => [
+            'nullable',
+            'string',
+            'max:50',
+            Rule::unique('users', 'username')->ignore($user->id)
+        ],
+        'password' => 'nullable|string|min:8',
+    ]);
 
-        if ($validator->fails()) {
-            return response()->json([
-                'success' => false,
-                'errors' => $validator->errors()
-            ], 422);
-        }
-
-        if ($request->hasFile('avatar')) {
-            $file = $request->file('avatar');
-            $path = $file->store('avatars', 'public');
-            $user->avatar_url = asset('storage/' . $path);
-        }
-
-        if ($request->has('bio')) {
-            $user->bio = $request->bio;
-        }
-
-        $user->save();
-
+    if ($validator->fails()) {
         return response()->json([
-            'success' => true,
-            'message' => 'Profil kamu berhasil diperbarui, bro!',
-            'user'    => $user
-        ]);
+            'success' => false,
+            'errors'  => $validator->errors()
+        ], 422);
     }
+
+    if ($request->hasFile('avatar')) {
+        $file = $request->file('avatar');
+        $path = $file->store('avatars', 'public');
+        $user->avatar_url = asset('storage/' . $path);
+    }
+
+    if ($request->has('bio')) {
+        $user->bio = $request->bio;
+    }
+
+    if ($request->filled('username')) {
+        $user->username = $request->username;
+    }
+
+    if ($request->filled('password')) {
+        $user->password_hash = bcrypt($request->password);
+    }
+
+    $user->save();
+
+    return response()->json([
+        'success' => true,
+        'message' => 'Profil kamu berhasil diperbarui, bro!',
+        'user'    => $user
+    ]);
+}
 }

@@ -86,6 +86,9 @@ Route::middleware(['auth:api', 'rate.limit:200,1'])->group(function () {
     Route::post('/posts/{id}/toggle-archive', [PostController::class, 'toggleArchive'])->name('posts.archive');
     Route::post('/posts/{postId}/comments/{commentId}/toggle-accepted', [PostController::class, 'toggleAcceptedAnswer'])->name('posts.accepted');
 
+    // Tags Management (Bisa dibuat oleh siapa saja yang penting sudah login)
+    Route::post('tags', [TagController::class, 'store'])->name('tags.store');
+
     // Social & Interactions
     Route::post('user/follow/{id}', [FollowController::class, 'toggleFollow'])->middleware('rate.limit:200,1')->name('user.follow');
     Route::post('/vote', [VoteController::class, 'handleVote'])->middleware('rate.limit:200,1')->name('vote');
@@ -125,12 +128,13 @@ Route::middleware(['auth:api', 'rate.limit:200,1'])->group(function () {
     });
 
     Route::middleware('role:admin')->group(function () {
-        Route::post('tags', [TagController::class, 'store'])->name('admin.tags.store');
+        // Rute update & destroy tag tetap aman di sini (hanya untuk Admin)
         Route::put('tags/{id}', [TagController::class, 'update'])->name('admin.tags.update');
         Route::delete('tags/{id}', [TagController::class, 'destroy'])->name('admin.tags.destroy');
 
         Route::delete('categories/{id}', [CategoryController::class, 'destroy'])->name('admin.categories.destroy');
 
+        // Fix Typo Kecil 'pref ix' yang ada di script bawaan awal
         Route::put('admin/users/{id}/assign-role', [AuthController::class, 'assignRole'])->name('admin.users.role');
     });
 });
