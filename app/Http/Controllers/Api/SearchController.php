@@ -173,7 +173,7 @@ class SearchController extends Controller
             ->limit(5)
             ->get();
 
-        // Ambil data kategori
+        // ambil data kategori
         $categories = Category::where('name', 'LIKE', "%{$keyword}%")
             ->limit(5)
             ->get();

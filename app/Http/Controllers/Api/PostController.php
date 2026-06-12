@@ -172,9 +172,12 @@ class PostController extends Controller
             if ($request->has('tags')) {
                 $tagIds = [];
                 foreach ($request->tags as $tagName) {
+                    // PERBAIKAN: Normalisasi nama tag (hapus spasi luar & ubah ke huruf kecil agar konsisten)
+                    $cleanTagName = Str::lower(trim($tagName));
+
                     $tag = \App\Models\Tag::firstOrCreate(
-                        ['name' => $tagName],
-                        ['slug' => Str::slug($tagName), 'color' => '#3B82F6']
+                        ['name' => $cleanTagName],
+                        ['slug' => Str::slug($cleanTagName), 'color' => '#3B82F6']
                     );
                     $tagIds[] = $tag->id;
                 }
@@ -254,9 +257,12 @@ class PostController extends Controller
             if ($request->has('tags')) {
                 $tagIds = [];
                 foreach ($request->tags as $tagName) {
+                    // PERBAIKAN: Normalisasi nama tag saat update (hapus spasi luar & huruf kecil)
+                    $cleanTagName = Str::lower(trim($tagName));
+
                     $tag = \App\Models\Tag::firstOrCreate(
-                        ['name' => $tagName],
-                        ['slug' => Str::slug($tagName), 'color' => '#3B82F6']
+                        ['name' => $cleanTagName],
+                        ['slug' => Str::slug($cleanTagName), 'color' => '#3B82F6']
                     );
                     $tagIds[] = $tag->id;
                 }

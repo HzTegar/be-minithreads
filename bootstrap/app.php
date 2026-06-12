@@ -11,30 +11,20 @@ return Application::configure(basePath: dirname(__DIR__))
         commands: __DIR__.'/../routes/console.php',
         health: '/up',
     )
-
-    
-
     ->withMiddleware(function (Middleware $middleware) {
+        // 1. Daftarkan semua Global Middleware di sini (CORS)
+        $middleware->append(
+            \Illuminate\Http\Middleware\HandleCors::class
+        );
+
+        // 2. Daftarkan semua Alias Middleware Kustom kamu di sini
         $middleware->alias([
-            'role' => \App\Http\Middleware\CheckRole::class,
-            //mendaftarkan middleware cache.response kustom
+            'role'           => \App\Http\Middleware\CheckRole::class,
             'cache.response' => \App\Http\Middleware\CacheResponse::class,
-            //mendaftarkan alias rute untuk rate limiter kustom 
-             'rate.limit' => \App\Http\Middleware\RateLimitMiddleware::class,
+            'rate.limit'     => \App\Http\Middleware\RateLimitMiddleware::class,
         ]);
     })
-    ->withMiddleware(function (Middleware $middleware) {
-
-    $middleware->append(
-        \Illuminate\Http\Middleware\HandleCors::class
-    );
-
-    $middleware->alias([
-        'role' => \App\Http\Middleware\CheckRole::class,
-        'cache.response' => \App\Http\Middleware\CacheResponse::class,
-        'rate.limit' => \App\Http\Middleware\RateLimitMiddleware::class,
-    ]);
-})
-    ->withExceptions(function (Exceptions $exceptions): void {
-        //
-    })->create();
+    ->withExceptions(function (Exceptions $exceptions) {
+        // Tempat konfigurasi exception handling jika diperlukan
+    })
+    ->create();

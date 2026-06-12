@@ -16,21 +16,21 @@ class DatabaseSeeder extends Seeder
             [
                 'username' => 'admin_super',
                 'email' => 'admin@minithreads.com',
-                'password_hash' => Hash::make('password123'),
+                'password_hash' => 'password123',
                 'level' => 'admin',
                 'bio' => 'Saya adalah Admin Super di Mini Threads.',
             ],
             [
                 'username' => 'mod_kece',
                 'email' => 'moderator@minithreads.com',
-                'password_hash' => Hash::make('password123'),
+                'password_hash' => 'password123',
                 'level' => 'moderator',
                 'bio' => 'Moderator yang siap menjaga komunitas.',
             ],
             [
                 'username' => 'user_biasa',
                 'email' => 'user@minithreads.com',
-                'password_hash' => Hash::make('password123'),
+                'password_hash' => 'password123',
                 'level' => 'user',
                 'bio' => 'Hanya user biasa yang suka membaca.',
             ]
