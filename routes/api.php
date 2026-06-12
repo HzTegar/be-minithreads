@@ -51,6 +51,9 @@ Route::group(['middleware' => 'rate.limit:60,1'], function () {
 
     Route::get('categories', [CategoryController::class, 'index'])->middleware('cache.response:60');
     Route::get('categories/{id}', [CategoryController::class, 'show'])->middleware('cache.response:300');
+
+    // Public user profile
+    Route::get('users/{username}', [\App\Http\Controllers\Api\ProfileController::class, 'show']);
 });
 
 
