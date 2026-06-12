@@ -60,7 +60,7 @@ Route::group(['middleware' => 'rate.limit:200,1'], function () {
 Route::middleware(['auth:api', 'rate.limit:200,1'])->group(function () {
     
     // Auth & Profile
-    Route::group(['prefix' => 'auth'], function () {
+    Route::group(['pref ix' => 'auth'], function () {
         Route::get('me', [AuthController::class, 'me'])->name('auth.me');
         Route::post('logout', [AuthController::class, 'logout'])->name('auth.logout');
         Route::get('admin/dashboard', [AuthController::class, 'dashboard'])->name('auth.dashboard');
