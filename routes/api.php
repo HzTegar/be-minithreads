@@ -60,7 +60,7 @@ Route::group(['middleware' => 'rate.limit:200,1'], function () {
 Route::middleware(['auth:api', 'rate.limit:200,1'])->group(function () {
     
     // Auth & Profile
-    Route::group(['pref ix' => 'auth'], function () {
+    Route::group(['prefix' => 'auth'], function () {
         Route::get('me', [AuthController::class, 'me'])->name('auth.me');
         Route::post('logout', [AuthController::class, 'logout'])->name('auth.logout');
         Route::get('admin/dashboard', [AuthController::class, 'dashboard'])->name('auth.dashboard');
@@ -79,6 +79,9 @@ Route::middleware(['auth:api', 'rate.limit:200,1'])->group(function () {
     Route::get('/posts/{id}/history', [PostController::class, 'viewHistory'])->name('posts.history');
     Route::post('/posts/{id}/toggle-archive', [PostController::class, 'toggleArchive'])->name('posts.archive');
     Route::post('/posts/{postId}/comments/{commentId}/toggle-accepted', [PostController::class, 'toggleAcceptedAnswer'])->name('posts.accepted');
+
+    // Tags Management (Bisa dibuat oleh siapa saja yang penting sudah login)
+    Route::post('tags', [TagController::class, 'store'])->name('tags.store');
 
     // Social & Interactions
     Route::post('user/follow/{id}', [FollowController::class, 'toggleFollow'])->middleware('rate.limit:200,1')->name('user.follow');
@@ -119,12 +122,13 @@ Route::middleware(['auth:api', 'rate.limit:200,1'])->group(function () {
     });
 
     Route::middleware('role:admin')->group(function () {
-        Route::post('tags', [TagController::class, 'store'])->name('admin.tags.store');
+        // Rute update & destroy tag tetap aman di sini (hanya untuk Admin)
         Route::put('tags/{id}', [TagController::class, 'update'])->name('admin.tags.update');
         Route::delete('tags/{id}', [TagController::class, 'destroy'])->name('admin.tags.destroy');
 
         Route::delete('categories/{id}', [CategoryController::class, 'destroy'])->name('admin.categories.destroy');
 
+        // Fix Typo Kecil 'pref ix' yang ada di script bawaan awal
         Route::put('admin/users/{id}/assign-role', [AuthController::class, 'assignRole'])->name('admin.users.role');
     });
 });
