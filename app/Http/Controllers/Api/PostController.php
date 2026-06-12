@@ -53,7 +53,7 @@ class PostController extends Controller
         // FITUR TAMBAHAN: Integrasi Pencarian Kata Kunci (?keyword=...) langsung di dalam fungsi index
         if ($request->has('keyword')) {
             $validator = Validator::make($request->all(), [
-                'keyword' => 'required|string|min:2'
+                'keyword' => 'required|string|min:1'
             ], [
                 'keyword.min' => 'Keyword minimal :min karakter, bro.'
             ]);
@@ -172,9 +172,12 @@ class PostController extends Controller
             if ($request->has('tags')) {
                 $tagIds = [];
                 foreach ($request->tags as $tagName) {
+                    // PERBAIKAN: Normalisasi nama tag (hapus spasi luar & ubah ke huruf kecil agar konsisten)
+                    $cleanTagName = Str::lower(trim($tagName));
+
                     $tag = \App\Models\Tag::firstOrCreate(
-                        ['name' => $tagName],
-                        ['slug' => Str::slug($tagName), 'color' => '#3B82F6']
+                        ['name' => $cleanTagName],
+                        ['slug' => Str::slug($cleanTagName), 'color' => '#3B82F6']
                     );
                     $tagIds[] = $tag->id;
                 }
@@ -254,9 +257,12 @@ class PostController extends Controller
             if ($request->has('tags')) {
                 $tagIds = [];
                 foreach ($request->tags as $tagName) {
+                    // PERBAIKAN: Normalisasi nama tag saat update (hapus spasi luar & huruf kecil)
+                    $cleanTagName = Str::lower(trim($tagName));
+
                     $tag = \App\Models\Tag::firstOrCreate(
-                        ['name' => $tagName],
-                        ['slug' => Str::slug($tagName), 'color' => '#3B82F6']
+                        ['name' => $cleanTagName],
+                        ['slug' => Str::slug($cleanTagName), 'color' => '#3B82F6']
                     );
                     $tagIds[] = $tag->id;
                 }

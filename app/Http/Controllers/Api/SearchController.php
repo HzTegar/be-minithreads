@@ -15,15 +15,17 @@ class SearchController extends Controller
     /**
      * 1. SEARCH POSTS (Pencarian khusus Postingan)
      * Mencari berdasarkan judul, isi, kategori, atau tag.
+     * Mendukung pencarian instan sejak karakter pertama (1 huruf).
      */
     public function searchPosts(Request $request)
     {
         $keyword = $request->query('keyword');
 
-        if (!$keyword || strlen($keyword) < 2) {
+        // Diubah menjadi < 1 agar ketik 1 huruf langsung memunculkan data, bro
+        if (!$keyword || strlen($keyword) < 1) {
             return response()->json([
                 'success' => false,
-                'message' => 'Keyword minimal 2 karakter, bro.'
+                'message' => 'Keyword tidak boleh kosong, bro.'
             ], 422);
         }
 
@@ -51,15 +53,17 @@ class SearchController extends Controller
     /**
      * 2. SEARCH USERS (Pencarian khusus User)
      * Mencari berdasarkan username atau bio.
+     * Mendukung pencarian instan sejak karakter pertama (1 huruf).
      */
     public function searchUsers(Request $request)
     {
         $keyword = $request->query('keyword');
 
-        if (!$keyword || strlen($keyword) < 2) {
+        // Diubah menjadi < 1 agar ketik 1 huruf langsung memunculkan data, bro
+        if (!$keyword || strlen($keyword) < 1) {
             return response()->json([
                 'success' => false,
-                'message' => 'Keyword minimal 2 karakter, bro.'
+                'message' => 'Keyword tidak boleh kosong, bro.'
             ], 422);
         }
 
@@ -76,15 +80,17 @@ class SearchController extends Controller
 
     /**
      * 3. SEARCH TAGS (Pencarian khusus Tag)
+     * Mendukung pencarian instan sejak karakter pertama (1 huruf).
      */
     public function searchTags(Request $request)
     {
         $keyword = $request->query('keyword');
 
-        if (!$keyword || strlen($keyword) < 2) {
+        // Diubah menjadi < 1 agar ketik 1 huruf langsung memunculkan data, bro
+        if (!$keyword || strlen($keyword) < 1) {
             return response()->json([
                 'success' => false,
-                'message' => 'Keyword minimal 2 karakter, bro.'
+                'message' => 'Keyword tidak boleh kosong, bro.'
             ], 422);
         }
 
@@ -100,15 +106,17 @@ class SearchController extends Controller
 
     /**
      * 4. SEARCH CATEGORIES (Pencarian khusus Kategori)
+     * Mendukung pencarian instan sejak karakter pertama (1 huruf).
      */
     public function searchCategories(Request $request)
     {
         $keyword = $request->query('keyword');
 
-        if (!$keyword || strlen($keyword) < 2) {
+        // Diubah menjadi < 1 agar ketik 1 huruf langsung memunculkan data, bro
+        if (!$keyword || strlen($keyword) < 1) {
             return response()->json([
                 'success' => false,
-                'message' => 'Keyword minimal 2 karakter, bro.'
+                'message' => 'Keyword tidak boleh kosong, bro.'
             ], 422);
         }
 
@@ -123,17 +131,46 @@ class SearchController extends Controller
     }
 
     /**
-     * 5. GLOBAL SEARCH
+     * 5. SEARCH COMMENTS (Pencarian khusus Komentar)
+     * Mendukung pencarian instan sejak karakter pertama (1 huruf).
+     */
+    public function searchComments(Request $request)
+    {
+        $keyword = $request->query('keyword');
+
+        if (!$keyword || strlen($keyword) < 1) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Keyword tidak boleh kosong, bro.'
+            ], 422);
+        }
+
+        $comments = \App\Models\Comment::with(['user', 'post'])
+            ->where('body', 'LIKE', "%{$keyword}%")
+            ->latest()
+            ->paginate(10);
+
+        return response()->json([
+            'success' => true,
+            'message' => "Hasil pencarian komentar untuk keyword: '$keyword'",
+            'data' => $comments
+        ], 200);
+    }
+
+    /**
+     * 6. GLOBAL SEARCH
      * Mencari di semua entitas dan mengembalikan hasil gabungan.
+     * Mendukung pencarian instan sejak karakter pertama (1 huruf).
      */
     public function searchGlobal(Request $request)
     {
         $keyword = $request->query('keyword');
 
-        if (!$keyword || strlen($keyword) < 2) {
+        // Diubah menjadi < 1 agar ketik 1 huruf langsung memunculkan data, bro
+        if (!$keyword || strlen($keyword) < 1) {
             return response()->json([
                 'success' => false,
-                'message' => 'Keyword minimal 2 karakter, bro.'
+                'message' => 'Keyword tidak boleh kosong, bro.'
             ], 422);
         }
 
@@ -163,8 +200,15 @@ class SearchController extends Controller
             ->limit(5)
             ->get();
 
-        // Ambil data kategori
+        // ambil data kategori
         $categories = Category::where('name', 'LIKE', "%{$keyword}%")
+            ->limit(5)
+            ->get();
+
+        // Ambil data komentar
+        $comments = \App\Models\Comment::with(['user', 'post'])
+            ->where('body', 'LIKE', "%{$keyword}%")
+            ->latest()
             ->limit(5)
             ->get();
 
@@ -175,7 +219,8 @@ class SearchController extends Controller
                 'posts'      => $posts,
                 'users'      => $users,
                 'tags'       => $tags,
-                'categories' => $categories
+                'categories' => $categories,
+                'comments'   => $comments
             ]
         ], 200);
     }

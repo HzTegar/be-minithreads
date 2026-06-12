@@ -14,9 +14,17 @@ class CategoryController extends Controller
      * 1. AMBIL SEMUA KATEGORI (INDEX)
      * Publik: Bisa diakses oleh User, Moderator, dan Admin
      */
-    public function index()
+    public function index(Request $request)
     {
-        $categories = Category::withCount('posts')->latest()->get();
+        $query = Category::withCount('posts')->latest();
+
+        if ($request->has('keyword')) {
+            $keyword = $request->keyword;
+            $query->where('name', 'LIKE', "%{$keyword}%")
+                  ->orWhere('description', 'LIKE', "%{$keyword}%");
+        }
+
+        $categories = $query->get();
 
         return response()->json([
             'success' => true,

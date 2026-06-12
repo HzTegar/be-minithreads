@@ -18,7 +18,7 @@ class RateLimitMiddleware
      * @param  int  $decayMinutes Durasi penguncian/reset dalam satuan menit (default: 1)
      * @return \Symfony\Component\HttpFoundation\Response
      */
-    public function handle(Request $request, Closure $next, int $maxAttempts = 220, int $decayMinutes = 1): Response
+    public function handle(Request $request, Closure $next, int $maxAttempts = 200, int $decayMinutes = 1): Response
     {
         // BYPASS: Jika sedang dalam mode testing/local, jangan batasi request agar Cypress & Test lancar.
         // KECUALI jika request meminta pengetesan middleware secara eksplisit.

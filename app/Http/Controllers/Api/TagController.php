@@ -13,9 +13,16 @@ class TagController extends Controller
     /**
      * 1. AMBIL SEMUA TAG (INDEX)
      */
-    public function index()
+    public function index(Request $request)
     {
-        $tags = Tag::withCount('posts')->latest()->get();
+        $query = Tag::withCount('posts')->latest();
+
+        if ($request->has('keyword')) {
+            $keyword = $request->keyword;
+            $query->where('name', 'LIKE', "%{$keyword}%");
+        }
+
+        $tags = $query->get();
 
         return response()->json([
             'success' => true,

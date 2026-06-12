@@ -12,15 +12,24 @@ class BookmarkController extends Controller
     /**
      * 1. MENAMPILKAN DAFTAR BOOKMARK USER
      */
-    public function index()
+    public function index(Request $request)
     {
         $user = auth('api')->user();
 
         // Mengambil data dari tabel bookmarks milik user ini, langsung ditarik data postingannya
-        $bookmarks = Bookmark::where('user_id', $user->id)
+        $query = Bookmark::where('user_id', $user->id)
             ->with(['post.user', 'post.category']) // Load data post beserta penulis dan kategorinya
-            ->latest()
-            ->paginate(10);
+            ->latest();
+
+        if ($request->has('keyword')) {
+            $keyword = $request->keyword;
+            $query->whereHas('post', function ($q) use ($keyword) {
+                $q->where('title', 'LIKE', "%{$keyword}%")
+                  ->orWhere('body', 'LIKE', "%{$keyword}%");
+            });
+        }
+
+        $bookmarks = $query->paginate(10);
 
         return response()->json([
             'success' => true,

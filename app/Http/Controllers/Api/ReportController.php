@@ -124,6 +124,14 @@ class ReportController extends Controller
             $query->where('status', $request->status);
         }
 
+        if ($request->has('keyword')) {
+            $keyword = $request->keyword;
+            $query->where(function ($q) use ($keyword) {
+                $q->where('reason', 'LIKE', "%{$keyword}%")
+                  ->orWhere('description', 'LIKE', "%{$keyword}%");
+            });
+        }
+
         $reports = $query->latest()->paginate(15);
 
         return response()->json([
