@@ -148,14 +148,28 @@ class CommentController extends Controller
             ], 403);
         }
 
-        // --- FIX UTAMA: PENYESUAIAN NAMA RELASI MENJADI edit_histories() AGAR SELESAI EROR 500 ---
+        // Hitung total riwayat editan komentar ini melalui tabel relasi
         $editCount = $comment->edit_histories()->count();
 
-        if ($editCount >= 1) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Slot edit habis! Kamu hanya dibatasi mengedit komentar 1 kali per postingan, bro.'
-            ], 400); // Menggunakan kode status 400 (Bad Request) sesuai standar pengujian Cypress
+        // --- PENERAPAN PERCABANGAN STRUKTUR LOGIKA JATAH KUOTA EDIT BERDASARKAN ROLE ---
+        if ($user->isAdmin()) {
+            // Akun Administrator: Tidak ada intervensi pengecekan limit (Akses Bebas)
+        } elseif ($user->isModerator()) {
+            // Akun Moderator: Intervensi pemblokiran jika riwayat komparasi mencapai angka 5
+            if ($editCount >= 5) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Slot edit habis! Sebagai Moderator, kamu hanya dibatasi mengedit komentar maksimal 5 kali, bro.'
+                ], 400);
+            }
+        } else {
+            // Akun Pengguna Biasa: Batasan ketat maksimal sebanyak 1 kali
+            if ($editCount >= 1) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Slot edit habis! Kamu hanya dibatasi mengedit komentar 1 kali per postingan, bro.'
+                ], 400);
+            }
         }
 
         // 3. Validasi input teks body
@@ -185,7 +199,7 @@ class CommentController extends Controller
             // Hitung ini adalah editan yang ke-berapa untuk komentar ini
             $nextEditNumber = $editCount + 1;
 
-            // FIX: Mengubah edit_histories() dan memetakan field tabel dengan tepat
+            // Memasukkan log pencatatan ke dalam relasi edit_histories
             $comment->edit_histories()->create([
                 'user_id'     => $user->id,
                 'old_content' => $comment->body,        
