@@ -50,6 +50,11 @@ class PostController extends Controller
             });
         }
 
+        // Filter berdasarkan status (open/closed)
+        if ($request->has('status')) {
+            $query->where('status', $request->status);
+        }
+
         // FITUR TAMBAHAN: Integrasi Pencarian Kata Kunci (?keyword=...) langsung di dalam fungsi index
         if ($request->has('keyword')) {
             $validator = Validator::make($request->all(), [
