@@ -11,7 +11,7 @@ class ReputationService
     const MIN_POINTS_TO_POST = 20;
     const POINTS_LIKE = 10;
     const POINTS_VOTE = 5;
-    const POINTS_DOWNVOTE = 5; // Will be used for deduction
+    const POINTS_DOWNVOTE = 5; 
     const POINTS_ACCEPTED_ANSWER = 15;
 
     /**
